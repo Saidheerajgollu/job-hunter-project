@@ -93,6 +93,8 @@ const CATEGORIES = [
 
 const SOURCES = [
     { value: '', label: 'All Sources' },
+    { value: 'simplifyjobs', label: '⭐ SimplifyJobs' },
+    { value: 'adzuna', label: '🌐 Adzuna' },
     { value: 'linkedin', label: 'LinkedIn' },
     { value: 'indeed', label: 'Indeed' },
     { value: 'greenhouse', label: 'Greenhouse' },
@@ -103,7 +105,7 @@ const SOURCES = [
 
 function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
     const [search, setSearch] = useState(filters.search || '');
-    const timerRef = useRef<NodeJS.Timeout>();
+    const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
     function handleSearch(val: string) {
         setSearch(val);

@@ -10,7 +10,10 @@ import { scrapeGreenhouse } from './scrapers/greenhouse.js';
 import { scrapeLever } from './scrapers/lever.js';
 import { scrapeWorkday } from './scrapers/workday.js';
 import { scrapeDirectCareerPages } from './scrapers/direct.js';
+import { scrapeSimplifyJobs } from './scrapers/simplifyjobs.js';
+import { scrapeAdzuna } from './scrapers/adzuna.js';
 import { insertJob, startScrapeRun, finishScrapeRun, getAllSettings } from './db.js';
+
 
 export async function runScraper() {
     const settings = getAllSettings();
@@ -33,6 +36,8 @@ export async function runScraper() {
         { name: 'Lever', fn: () => scrapeLever(filterSenior) },
         { name: 'Workday', fn: () => scrapeWorkday(filterSenior) },
         { name: 'Direct Career Pages', fn: () => scrapeDirectCareerPages(filterSenior) },
+        { name: 'SimplifyJobs', fn: () => scrapeSimplifyJobs(filterSenior) },
+        { name: 'Adzuna', fn: () => scrapeAdzuna(filterSenior) },
     ];
 
     // Run API scrapers in parallel (they're all fetch-based)
