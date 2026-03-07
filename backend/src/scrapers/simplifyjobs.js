@@ -7,41 +7,27 @@
  * Data: https://github.com/SimplifyJobs/New-Grad-Positions
  */
 
-import { makeJobId, isSeniorRole } from '../utils/helpers.js';
+import { makeJobId, isSeniorRole, classifyCategory } from '../utils/helpers.js';
 
 const LISTINGS_URL =
     'https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json';
 
-// SimplifyJobs categories → our categories
-const CATEGORY_MAP = {
-    'Software': 'swe',
-    'Data': 'data',
-    'Quant': 'data',
-    'ML': 'ai',
-    'AI': 'ai',
-    'Security': 'swe',
-    'Hardware': 'swe',
-    'Embedded': 'swe',
-    'DevOps': 'swe',
-    'Cloud': 'swe',
-    'Firmware': 'swe',
-    'Mobile': 'swe',
+// SimplifyJobs category field → hint passed to shared classifyCategory
+const SIMPLIFY_CATEGORY_HINT = {
+    'Software': 'software engineer',
+    'Data': 'data engineer',
+    'Quant': 'data analyst quant',
+    'ML': 'machine learning engineer',
+    'AI': 'ai engineer llm',
+    'Security': 'security engineer',
+    'Hardware': 'hardware engineer',
+    'Embedded': 'embedded firmware engineer',
+    'DevOps': 'devops cloud engineer',
+    'Cloud': 'cloud devops engineer',
+    'Firmware': 'firmware embedded engineer',
+    'Mobile': 'mobile ios android developer',
 };
 
-function classifyCategory(simplifyCategory, title) {
-    // First try the SimplifyJobs category field
-    if (simplifyCategory && CATEGORY_MAP[simplifyCategory]) {
-        return CATEGORY_MAP[simplifyCategory];
-    }
-    // Fall back to title-based classification
-    const lower = title.toLowerCase();
-    if (lower.includes('machine learning') || lower.includes(' ml ') ||
-        lower.includes('ai ') || lower.includes('llm') || lower.includes('nlp') ||
-        lower.includes('deep learning') || lower.includes('computer vision')) return 'ai';
-    if (lower.includes('data scientist') || lower.includes('data engineer') ||
-        lower.includes('analytics') || lower.includes('quant')) return 'data';
-    return 'swe';
-}
 
 // Only keep jobs posted in the last 90 days (SimplifyJobs has historical data too)
 const NINETY_DAYS_AGO = Date.now() - 90 * 24 * 60 * 60 * 1000;
@@ -93,7 +79,7 @@ export async function scrapeSimplifyJobs(filterSenior = true) {
                 location,
                 url: listing.url,
                 source: 'simplifyjobs',
-                category: classifyCategory(listing.category, listing.title || ''),
+                category: classifyCategory(listing.title || '', SIMPLIFY_CATEGORY_HINT[listing.category] || ''),
                 salary: null,
                 description: null,
                 posted_at: postedAt,
