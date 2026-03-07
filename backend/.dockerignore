@@ -1,0 +1,7 @@
+# Docker ignore — don't send these to Docker build context
+node_modules
+data/*.db
+*.log
+.env
+.env.local
+npm-debug.log*
