@@ -8,7 +8,7 @@ export interface Job {
     location: string;
     url: string;
     source: string;
-    category: 'ai' | 'swe' | 'data';
+    category: 'swe' | 'fullstack' | 'ai' | 'ml' | 'data-science' | 'data-engineer' | 'data-analyst' | 'devops';
     salary: string | null;
     description: string | null;
     posted_at: string;

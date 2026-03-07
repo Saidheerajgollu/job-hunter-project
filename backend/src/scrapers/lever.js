@@ -4,7 +4,7 @@
  * No browser needed — pure HTTP fetch.
  */
 
-import { makeJobId, isSeniorRole, sleep } from '../utils/helpers.js';
+import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
 
 const LEVER_COMPANIES = [
     // AI / ML
@@ -29,13 +29,7 @@ function isNewGrad(title, tags = []) {
     return NEW_GRAD_KEYWORDS.some(kw => text.includes(kw));
 }
 
-function classifyCategory(title) {
-    const lower = title.toLowerCase();
-    if (lower.includes('machine learning') || lower.includes(' ml ') || lower.includes('ai ') ||
-        lower.includes('artificial intelligence') || lower.includes('nlp') || lower.includes('llm')) return 'ai';
-    if (lower.includes('data scientist') || lower.includes('data engineer') || lower.includes('analytics')) return 'data';
-    return 'swe';
-}
+// classifyCategory imported from helpers
 
 export async function scrapeLever(filterSenior = true) {
     const jobs = [];

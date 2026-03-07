@@ -55,17 +55,17 @@ db.exec(`
 
 // Seed default settings
 const defaultSettings = {
-    keywords_ai: 'new grad AI engineer,new grad machine learning engineer,entry level AI engineer,2026 new grad AI',
-    keywords_swe: 'new grad software engineer,entry level software engineer,2026 new grad SWE,new grad full stack',
-    keywords_data: 'new grad data scientist,new grad data engineer,entry level data scientist,new grad analytics engineer',
-    scrape_interval_hours: '4',
-    filter_exclude_senior: 'true',
-    notification_enabled: 'true',
+  keywords_ai: 'new grad AI engineer,new grad machine learning engineer,entry level AI engineer,2026 new grad AI',
+  keywords_swe: 'new grad software engineer,entry level software engineer,2026 new grad SWE,new grad full stack',
+  keywords_data: 'new grad data scientist,new grad data engineer,entry level data scientist,new grad analytics engineer',
+  scrape_interval_hours: '4',
+  filter_exclude_senior: 'true',
+  notification_enabled: 'true',
 };
 
 const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
 for (const [key, value] of Object.entries(defaultSettings)) {
-    insertSetting.run(key, value);
+  insertSetting.run(key, value);
 }
 
 // ── Prepared Statements ──────────────────────────────────────────────────────
@@ -82,7 +82,7 @@ export const getJobs = db.prepare(`
     (:category IS NULL OR category = :category) AND
     (:source IS NULL OR source = :source) AND
     (:search IS NULL OR title LIKE :search OR company LIKE :search)
-  ORDER BY scraped_at DESC
+  ORDER BY posted_at DESC, scraped_at DESC
   LIMIT :limit OFFSET :offset
 `);
 
@@ -135,8 +135,8 @@ export const getLastScrapeRun = db.prepare(`
 `);
 
 export function getAllSettings() {
-    const rows = getSettings.all();
-    return Object.fromEntries(rows.map(r => [r.key, r.value]));
+  const rows = getSettings.all();
+  return Object.fromEntries(rows.map(r => [r.key, r.value]));
 }
 
 export default db;

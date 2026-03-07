@@ -16,6 +16,13 @@ function timeAgo(dateStr: string) {
     return `${Math.floor(hours / 24)}d ago`;
 }
 
+function formatDate(dateStr: string) {
+    if (!dateStr) return 'Date unknown';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'Date unknown';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 function getCompanyInitials(company: string) {
     return company.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 }
@@ -86,9 +93,14 @@ interface FilterBarProps {
 
 const CATEGORIES = [
     { value: '', label: 'All' },
-    { value: 'ai', label: '🤖 AI/ML' },
-    { value: 'swe', label: '💻 SWE' },
-    { value: 'data', label: '📊 Data' },
+    { value: 'swe', label: '💻 Software Eng' },
+    { value: 'fullstack', label: '🌐 Full Stack' },
+    { value: 'ai', label: '🤖 AI Engineer' },
+    { value: 'ml', label: '🧠 ML Engineer' },
+    { value: 'data-science', label: '📊 Data Science' },
+    { value: 'data-engineer', label: '🛢️ Data Engineer' },
+    { value: 'data-analyst', label: '📈 Data Analyst' },
+    { value: 'devops', label: '☁️ DevOps/Cloud' },
 ];
 
 const SOURCES = [
@@ -195,14 +207,22 @@ function JobCard({
                 <div className="job-meta">
                     {job.location && <span className="job-meta-item">📍 {job.location}</span>}
                     {job.salary && <span className="job-meta-item">💰 {job.salary}</span>}
-                    <span className="job-meta-item">🕐 {timeAgo(job.scraped_at)}</span>
+                    <span className="job-meta-item">📅 Posted {formatDate(job.posted_at || job.scraped_at)}</span>
+                    <span className="job-meta-item" style={{ opacity: 0.6 }}>🕐 Scraped {timeAgo(job.scraped_at)}</span>
                 </div>
             </div>
 
             <div className="job-badges">
                 {job.is_new === 1 && <span className="badge badge-new">NEW</span>}
-                <span className={`badge badge-${job.category}`}>
-                    {job.category === 'ai' ? 'AI/ML' : job.category === 'data' ? 'DATA' : 'SWE'}
+                <span className={`badge badge-cat-${job.category}`}>
+                    {job.category === 'ai' ? 'AI Eng' :
+                        job.category === 'ml' ? 'ML Eng' :
+                            job.category === 'fullstack' ? 'Full Stack' :
+                                job.category === 'data-science' ? 'Data Science' :
+                                    job.category === 'data-engineer' ? 'Data Eng' :
+                                        job.category === 'data-analyst' ? 'Data Analyst' :
+                                            job.category === 'devops' ? 'DevOps' :
+                                                'SWE'}
                 </span>
                 <span className={`badge badge-${job.source}`}>{job.source}</span>
                 {job.status === 'applied' && <span className="badge badge-applied">✓ Applied</span>}

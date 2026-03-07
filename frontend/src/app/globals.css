@@ -503,19 +503,45 @@ body {
   animation: pulse-new 2s infinite;
 }
 
-.badge-ai {
-  background: rgba(155, 89, 182, 0.2);
-  color: #bb8fce;
+/* Category badges */
+.badge-cat-swe {
+  background: rgba(76, 110, 245, 0.15);
+  color: #748ffc;
 }
 
-.badge-swe {
+.badge-cat-fullstack {
+  background: rgba(20, 184, 166, 0.15);
+  color: #2dd4bf;
+}
+
+.badge-cat-ai {
+  background: rgba(139, 92, 246, 0.2);
+  color: #c084fc;
+}
+
+.badge-cat-ml {
+  background: rgba(217, 70, 239, 0.15);
+  color: #e879f9;
+}
+
+.badge-cat-data-science {
   background: rgba(32, 201, 151, 0.15);
-  color: #20c997;
+  color: #34d399;
 }
 
-.badge-data {
-  background: rgba(253, 126, 20, 0.15);
-  color: #fd7e14;
+.badge-cat-data-engineer {
+  background: rgba(14, 165, 233, 0.15);
+  color: #38bdf8;
+}
+
+.badge-cat-data-analyst {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.badge-cat-devops {
+  background: rgba(249, 115, 22, 0.15);
+  color: #fb923c;
 }
 
 .badge-linkedin {

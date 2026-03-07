@@ -4,7 +4,7 @@
  * No browser needed — pure HTTP fetch.
  */
 
-import { makeJobId, isSeniorRole, sleep } from '../utils/helpers.js';
+import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
 
 // Companies known to use Greenhouse job boards (expand this list!)
 const GREENHOUSE_COMPANIES = [
@@ -30,12 +30,7 @@ function isNewGradRole(title, metadata = '') {
     return NEW_GRAD_KEYWORDS.some(kw => text.includes(kw));
 }
 
-function classifyCategory(title) {
-    const lower = title.toLowerCase();
-    if (lower.includes('machine learning') || lower.includes('ml ') || lower.includes('ai ') || lower.includes('artificial intelligence')) return 'ai';
-    if (lower.includes('data scientist') || lower.includes('data engineer') || lower.includes('data analyst') || lower.includes('analytics')) return 'data';
-    return 'swe';
-}
+// classifyCategory imported from helpers
 
 export async function scrapeGreenhouse(filterSenior = true) {
     const jobs = [];

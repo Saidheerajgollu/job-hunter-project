@@ -52,6 +52,40 @@ export function isSeniorRole(title) {
 }
 
 /**
+ * Classify a job title into a granular CS category.
+ * Categories: ai | ml | fullstack | data-science | data-engineer | data-analyst | devops | swe
+ */
+export function classifyCategory(title, hint = '') {
+    const text = (title + ' ' + hint).toLowerCase();
+
+    // AI Engineer — LLM, GenAI, NLP focused
+    if (/\b(ai engineer|llm|large language|generative ai|gen ai|nlp|natural language|computer vision|cv engineer|ai\/ml)\b/.test(text)) return 'ai';
+
+    // ML Engineer — model training, deep learning, research
+    if (/\b(machine learning|ml engineer|deep learning|mlops|model engineer|research engineer|reinforcement|pytorch|tensorflow)\b/.test(text)) return 'ml';
+
+    // Full Stack — explicit full stack or frontend+backend combo
+    if (/\b(full.?stack|fullstack|front.?end|frontend|react|angular|vue|ios|android|mobile)\b/.test(text) && /\b(full.?stack|fullstack)\b/.test(text)) return 'fullstack';
+    if (/\bfull.?stack\b/.test(text)) return 'fullstack';
+
+    // Data Scientist
+    if (/\b(data scien|scientist|statistical|analytics scientist|research scientist|applied scientist)\b/.test(text)) return 'data-science';
+
+    // Data Engineer
+    if (/\b(data engineer|analytics engineer|etl|pipeline engineer|data platform|data infrastructure|spark|airflow|dbt)\b/.test(text)) return 'data-engineer';
+
+    // Data Analyst
+    if (/\b(data analyst|business analyst|bi analyst|business intelligence|tableau|looker|power bi|sql analyst)\b/.test(text)) return 'data-analyst';
+
+    // DevOps / Cloud / SRE
+    if (/\b(devops|sre|site reliability|cloud engineer|platform engineer|infrastructure|kubernetes|docker|ci\/cd|devsecops)\b/.test(text)) return 'devops';
+
+    // Default: Software Engineer / Developer
+    return 'swe';
+}
+
+
+/**
  * Retry a function up to N times with delay
  */
 export async function retry(fn, retries = 3, delayMs = 2000) {

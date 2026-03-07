@@ -4,7 +4,7 @@
  * Workday exposes a REST API endpoint for job searches.
  */
 
-import { makeJobId, isSeniorRole, sleep } from '../utils/helpers.js';
+import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
 
 // Companies using Workday with their tenant IDs
 const WORKDAY_TENANTS = [
@@ -31,19 +31,7 @@ const WORKDAY_TENANTS = [
 ];
 
 const NEW_GRAD_SEARCH_TERMS = ['new grad', 'university grad', 'campus hire', '2026', 'early career'];
-const CATEGORY_KEYWORDS = {
-    ai: ['machine learning', 'artificial intelligence', 'ai engineer', 'llm', 'nlp', 'deep learning'],
-    data: ['data scientist', 'data engineer', 'data analyst', 'analytics engineer'],
-    swe: ['software engineer', 'software developer', 'sde ', 'backend', 'frontend', 'full stack'],
-};
-
-function classifyCategory(title) {
-    const lower = title.toLowerCase();
-    for (const [cat, kws] of Object.entries(CATEGORY_KEYWORDS)) {
-        if (kws.some(kw => lower.includes(kw))) return cat;
-    }
-    return 'swe';
-}
+// classifyCategory imported from helpers
 
 async function fetchWorkdayJobs(tenant) {
     const apiUrl = `https://${tenant.subdomain}.wd1.myworkdayjobs.com/wday/cxs/${tenant.subdomain}/${tenant.subdomain}_Careers/jobs`;
