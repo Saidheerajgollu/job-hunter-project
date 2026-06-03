@@ -1,0 +1,128 @@
+/**
+ * 200 Bay Area companies hiring international students (F-1/OPT).
+ * Source: Bay_Area_200_Companies_OPT_F1_Guide — verified H-1B sponsors.
+ * Focused on SWE/ML/Data roles.
+ */
+
+export const BAY_AREA_COMPANIES = [
+    // ── FAANG / Big Tech ──────────────────────────────────────────────────────
+    { name: 'Google / Alphabet',    domain: 'google.com',           career_url: 'https://careers.google.com',                    ats_type: 'custom',                                     category: 'bigtech' },
+    { name: 'Meta',                 domain: 'meta.com',             career_url: 'https://metacareers.com',                       ats_type: 'custom',                                     category: 'bigtech' },
+    { name: 'Apple',                domain: 'apple.com',            career_url: 'https://jobs.apple.com',                        ats_type: 'custom',                                     category: 'bigtech' },
+    { name: 'Netflix',              domain: 'netflix.com',          career_url: 'https://jobs.netflix.com',                      ats_type: 'greenhouse', ats_slug: 'netflix',            category: 'bigtech' },
+    { name: 'Amazon / AWS (SF)',    domain: 'amazon.com',           career_url: 'https://amazon.jobs',                           ats_type: 'custom',                                     category: 'bigtech' },
+    { name: 'Salesforce',           domain: 'salesforce.com',       career_url: 'https://salesforce.com/company/careers',        ats_type: 'custom',                                     category: 'bigtech' },
+    { name: 'Oracle',               domain: 'oracle.com',           career_url: 'https://careers.oracle.com',                    ats_type: 'custom',                                     category: 'bigtech' },
+    { name: 'Adobe',                domain: 'adobe.com',            career_url: 'https://adobe.com/careers',                     ats_type: 'greenhouse', ats_slug: 'adobe',              category: 'bigtech' },
+    { name: 'Cisco',                domain: 'cisco.com',            career_url: 'https://jobs.cisco.com',                        ats_type: 'custom',                                     category: 'bigtech' },
+    { name: 'Intel',                domain: 'intel.com',            career_url: 'https://intel.com/jobs',                        ats_type: 'custom',                                     category: 'bigtech' },
+    { name: 'ServiceNow',           domain: 'servicenow.com',       career_url: 'https://careers.servicenow.com',                ats_type: 'greenhouse', ats_slug: 'servicenow',         category: 'bigtech' },
+    { name: 'Zoom',                 domain: 'zoom.us',              career_url: 'https://zoom.us/careers',                       ats_type: 'greenhouse', ats_slug: 'zoom',               category: 'bigtech' },
+    { name: 'Palo Alto Networks',   domain: 'paloaltonetworks.com', career_url: 'https://paloaltonetworks.com/company/careers',  ats_type: 'greenhouse', ats_slug: 'paloaltonetworks',   category: 'bigtech' },
+    { name: 'Intuit',               domain: 'intuit.com',           career_url: 'https://careers.intuit.com',                    ats_type: 'greenhouse', ats_slug: 'intuit',             category: 'bigtech' },
+    { name: 'LinkedIn',             domain: 'linkedin.com',         career_url: 'https://careers.linkedin.com',                  ats_type: 'custom',                                     category: 'bigtech' },
+    { name: 'Nvidia',               domain: 'nvidia.com',           career_url: 'https://nvidia.com/en-us/about-nvidia/careers', ats_type: 'custom',                                     category: 'bigtech' },
+
+    // ── AI / ML / Foundation Models ───────────────────────────────────────────
+    { name: 'OpenAI',               domain: 'openai.com',           career_url: 'https://openai.com/careers',                    ats_type: 'greenhouse', ats_slug: 'openai',             category: 'ai' },
+    { name: 'Anthropic',            domain: 'anthropic.com',        career_url: 'https://anthropic.com/careers',                 ats_type: 'greenhouse', ats_slug: 'anthropic',          category: 'ai' },
+    { name: 'Scale AI',             domain: 'scale.com',            career_url: 'https://scale.com/careers',                     ats_type: 'greenhouse', ats_slug: 'scale',              category: 'ai' },
+    { name: 'Cohere',               domain: 'cohere.com',           career_url: 'https://cohere.com/careers',                    ats_type: 'greenhouse', ats_slug: 'cohere',             category: 'ai' },
+    { name: 'Hugging Face',         domain: 'huggingface.co',       career_url: 'https://huggingface.co/jobs',                   ats_type: 'greenhouse', ats_slug: 'huggingface',        category: 'ai' },
+    { name: 'Perplexity AI',        domain: 'perplexity.ai',        career_url: 'https://perplexity.ai/hub/careers',             ats_type: 'greenhouse', ats_slug: 'perplexity',         category: 'ai' },
+    { name: 'Anyscale',             domain: 'anyscale.com',         career_url: 'https://anyscale.com/careers',                  ats_type: 'ashby',      ats_slug: 'anyscale',           category: 'ai' },
+    { name: 'Weights & Biases',     domain: 'wandb.ai',             career_url: 'https://wandb.ai/careers',                      ats_type: 'ashby',      ats_slug: 'wandb',              category: 'ai' },
+    { name: 'Together AI',          domain: 'together.ai',          career_url: 'https://together.ai/careers',                   ats_type: 'ashby',      ats_slug: 'together',           category: 'ai' },
+    { name: 'Mistral AI',           domain: 'mistral.ai',           career_url: 'https://mistral.ai/careers',                    ats_type: 'ashby',      ats_slug: 'mistral',            category: 'ai' },
+    { name: 'Glean',                domain: 'glean.com',            career_url: 'https://glean.com/careers',                     ats_type: 'greenhouse', ats_slug: 'glean',              category: 'ai' },
+    { name: 'Groq',                 domain: 'groq.com',             career_url: 'https://groq.com/careers',                      ats_type: 'greenhouse', ats_slug: 'groq',               category: 'ai' },
+    { name: 'Runway ML',            domain: 'runwayml.com',         career_url: 'https://runwayml.com/careers',                  ats_type: 'ashby',      ats_slug: 'runway',             category: 'ai' },
+    { name: 'Harvey AI',            domain: 'harvey.ai',            career_url: 'https://harvey.ai/careers',                     ats_type: 'greenhouse', ats_slug: 'harveyhq',           category: 'ai' },
+    { name: 'Imbue',                domain: 'imbue.com',            career_url: 'https://imbue.com/careers',                     ats_type: 'ashby',      ats_slug: 'imbue',              category: 'ai' },
+    { name: 'Contextual AI',        domain: 'contextual.ai',        career_url: 'https://contextual.ai/careers',                 ats_type: 'ashby',      ats_slug: 'contextual',         category: 'ai' },
+    { name: 'Recursion Pharma',     domain: 'recursion.com',        career_url: 'https://recursion.com/careers',                 ats_type: 'greenhouse', ats_slug: 'recursion',          category: 'ai' },
+
+    // ── Data / Cloud / Infra ──────────────────────────────────────────────────
+    { name: 'Databricks',           domain: 'databricks.com',       career_url: 'https://databricks.com/company/careers',        ats_type: 'greenhouse', ats_slug: 'databricks',         category: 'data' },
+    { name: 'Snowflake',            domain: 'snowflake.com',        career_url: 'https://careers.snowflake.com',                 ats_type: 'greenhouse', ats_slug: 'snowflake',          category: 'data' },
+    { name: 'dbt Labs',             domain: 'getdbt.com',           career_url: 'https://getdbt.com/dbt-labs/careers',           ats_type: 'greenhouse', ats_slug: 'dbtlabs',            category: 'data' },
+    { name: 'Fivetran',             domain: 'fivetran.com',         career_url: 'https://fivetran.com/careers',                  ats_type: 'greenhouse', ats_slug: 'fivetran',           category: 'data' },
+    { name: 'Airbyte',              domain: 'airbyte.com',          career_url: 'https://airbyte.com/company/careers',           ats_type: 'greenhouse', ats_slug: 'airbyte',            category: 'data' },
+    { name: 'Cloudflare',           domain: 'cloudflare.com',       career_url: 'https://cloudflare.com/careers',                ats_type: 'greenhouse', ats_slug: 'cloudflare',         category: 'data' },
+    { name: 'HashiCorp',            domain: 'hashicorp.com',        career_url: 'https://hashicorp.com/careers',                 ats_type: 'greenhouse', ats_slug: 'hashicorp',          category: 'data' },
+    { name: 'Fastly',               domain: 'fastly.com',           career_url: 'https://fastly.com/about/careers',              ats_type: 'greenhouse', ats_slug: 'fastly',             category: 'data' },
+    { name: 'Supabase',             domain: 'supabase.com',         career_url: 'https://supabase.com/careers',                  ats_type: 'ashby',      ats_slug: 'supabase',           category: 'data' },
+    { name: 'PlanetScale',          domain: 'planetscale.com',      career_url: 'https://planetscale.com/careers',               ats_type: 'ashby',      ats_slug: 'planetscale',        category: 'data' },
+    { name: 'Cockroach Labs',       domain: 'cockroachlabs.com',    career_url: 'https://cockroachlabs.com/careers',             ats_type: 'greenhouse', ats_slug: 'cockroachdb',        category: 'data' },
+    { name: 'Neon',                 domain: 'neon.tech',            career_url: 'https://neon.tech/careers',                     ats_type: 'ashby',      ats_slug: 'neon',               category: 'data' },
+    { name: 'Starburst Data',       domain: 'starburst.io',         career_url: 'https://starburst.io/careers',                  ats_type: 'greenhouse', ats_slug: 'starburst',          category: 'data' },
+    { name: 'CrowdStrike',          domain: 'crowdstrike.com',      career_url: 'https://crowdstrike.com/careers',               ats_type: 'greenhouse', ats_slug: 'crowdstrike',        category: 'data' },
+
+    // ── Fintech / Payments ────────────────────────────────────────────────────
+    { name: 'Stripe',               domain: 'stripe.com',           career_url: 'https://stripe.com/jobs',                       ats_type: 'lever',      ats_slug: 'stripe',             category: 'fintech' },
+    { name: 'Coinbase',             domain: 'coinbase.com',         career_url: 'https://coinbase.com/careers',                  ats_type: 'greenhouse', ats_slug: 'coinbase',           category: 'fintech' },
+    { name: 'Plaid',                domain: 'plaid.com',            career_url: 'https://plaid.com/careers',                     ats_type: 'greenhouse', ats_slug: 'plaid',              category: 'fintech' },
+    { name: 'Brex',                 domain: 'brex.com',             career_url: 'https://brex.com/careers',                      ats_type: 'greenhouse', ats_slug: 'brex',               category: 'fintech' },
+    { name: 'Robinhood',            domain: 'robinhood.com',        career_url: 'https://careers.robinhood.com',                 ats_type: 'greenhouse', ats_slug: 'robinhood',          category: 'fintech' },
+    { name: 'Chime',                domain: 'chime.com',            career_url: 'https://chime.com/careers',                     ats_type: 'greenhouse', ats_slug: 'chime',              category: 'fintech' },
+    { name: 'SoFi',                 domain: 'sofi.com',             career_url: 'https://sofi.com/careers',                      ats_type: 'greenhouse', ats_slug: 'sofi',               category: 'fintech' },
+    { name: 'Affirm',               domain: 'affirm.com',           career_url: 'https://affirm.com/about/careers',              ats_type: 'greenhouse', ats_slug: 'affirm',             category: 'fintech' },
+    { name: 'Carta',                domain: 'carta.com',            career_url: 'https://carta.com/company/careers',             ats_type: 'greenhouse', ats_slug: 'carta',              category: 'fintech' },
+    { name: 'Rippling',             domain: 'rippling.com',         career_url: 'https://rippling.com/company/careers',          ats_type: 'greenhouse', ats_slug: 'rippling',           category: 'fintech' },
+    { name: 'Gusto',                domain: 'gusto.com',            career_url: 'https://gusto.com/company/jobs',                ats_type: 'greenhouse', ats_slug: 'gusto',              category: 'fintech' },
+    { name: 'Marqeta',              domain: 'marqeta.com',          career_url: 'https://marqeta.com/company/careers',           ats_type: 'greenhouse', ats_slug: 'marqeta',            category: 'fintech' },
+    { name: 'Ramp',                 domain: 'ramp.com',             career_url: 'https://ramp.com/careers',                      ats_type: 'ashby',      ats_slug: 'ramp',               category: 'fintech' },
+    { name: 'Mercury',              domain: 'mercury.com',          career_url: 'https://mercury.com/careers',                   ats_type: 'ashby',      ats_slug: 'mercury',            category: 'fintech' },
+
+    // ── Consumer / Marketplace ────────────────────────────────────────────────
+    { name: 'Airbnb',               domain: 'airbnb.com',           career_url: 'https://careers.airbnb.com',                    ats_type: 'greenhouse', ats_slug: 'airbnb',             category: 'consumer' },
+    { name: 'Lyft',                 domain: 'lyft.com',             career_url: 'https://lyft.com/careers',                      ats_type: 'greenhouse', ats_slug: 'lyft',               category: 'consumer' },
+    { name: 'DoorDash',             domain: 'doordash.com',         career_url: 'https://careers.doordash.com',                  ats_type: 'greenhouse', ats_slug: 'doordash',           category: 'consumer' },
+    { name: 'Instacart',            domain: 'instacart.com',        career_url: 'https://instacart.com/company/instacartcareers', ats_type: 'greenhouse', ats_slug: 'instacart',          category: 'consumer' },
+    { name: 'Uber',                 domain: 'uber.com',             career_url: 'https://uber.com/us/en/careers',                ats_type: 'greenhouse', ats_slug: 'uber',               category: 'consumer' },
+    { name: 'Pinterest',            domain: 'pinterest.com',        career_url: 'https://careers.pinterest.com',                 ats_type: 'greenhouse', ats_slug: 'pinterest',          category: 'consumer' },
+    { name: 'Reddit',               domain: 'reddit.com',           career_url: 'https://reddit.com/r/RedditEng/wiki/careers',   ats_type: 'greenhouse', ats_slug: 'reddit',             category: 'consumer' },
+    { name: 'Discord',              domain: 'discord.com',          career_url: 'https://discord.com/jobs',                      ats_type: 'greenhouse', ats_slug: 'discord',            category: 'consumer' },
+    { name: 'Snap',                 domain: 'snap.com',             career_url: 'https://snap.com/en-US/jobs',                   ats_type: 'greenhouse', ats_slug: 'snap',               category: 'consumer' },
+    { name: 'Samsara',              domain: 'samsara.com',          career_url: 'https://samsara.com/company/careers',           ats_type: 'greenhouse', ats_slug: 'samsara',            category: 'consumer' },
+    { name: 'Nextdoor',             domain: 'nextdoor.com',         career_url: 'https://about.nextdoor.com/careers',            ats_type: 'greenhouse', ats_slug: 'nextdoor',           category: 'consumer' },
+    { name: 'Eventbrite',           domain: 'eventbrite.com',       career_url: 'https://eventbrite.com/careers',                ats_type: 'greenhouse', ats_slug: 'eventbrite',         category: 'consumer' },
+
+    // ── Enterprise SaaS / Dev Tools ───────────────────────────────────────────
+    { name: 'Atlassian',            domain: 'atlassian.com',        career_url: 'https://atlassian.com/company/careers',         ats_type: 'greenhouse', ats_slug: 'atlassian',          category: 'saas' },
+    { name: 'HubSpot',              domain: 'hubspot.com',          career_url: 'https://hubspot.com/careers',                   ats_type: 'greenhouse', ats_slug: 'hubspot',            category: 'saas' },
+    { name: 'Notion',               domain: 'notion.so',            career_url: 'https://notion.so/careers',                     ats_type: 'greenhouse', ats_slug: 'notion',             category: 'saas' },
+    { name: 'Airtable',             domain: 'airtable.com',         career_url: 'https://airtable.com/careers',                  ats_type: 'greenhouse', ats_slug: 'airtable',           category: 'saas' },
+    { name: 'Asana',                domain: 'asana.com',            career_url: 'https://asana.com/jobs',                        ats_type: 'greenhouse', ats_slug: 'asana',              category: 'saas' },
+    { name: 'Dropbox',              domain: 'dropbox.com',          career_url: 'https://dropbox.com/jobs',                      ats_type: 'greenhouse', ats_slug: 'dropbox',            category: 'saas' },
+    { name: 'Box',                  domain: 'box.com',              career_url: 'https://jobs.box.com',                          ats_type: 'greenhouse', ats_slug: 'box',                category: 'saas' },
+    { name: 'Okta',                 domain: 'okta.com',             career_url: 'https://okta.com/company/careers',              ats_type: 'greenhouse', ats_slug: 'okta',               category: 'saas' },
+    { name: 'Twilio',               domain: 'twilio.com',           career_url: 'https://twilio.com/company/jobs',               ats_type: 'greenhouse', ats_slug: 'twilio',             category: 'saas' },
+    { name: 'Intercom',             domain: 'intercom.com',         career_url: 'https://intercom.com/careers',                  ats_type: 'greenhouse', ats_slug: 'intercom',           category: 'saas' },
+    { name: 'Zendesk',              domain: 'zendesk.com',          career_url: 'https://careers.zendesk.com',                   ats_type: 'greenhouse', ats_slug: 'zendesk',            category: 'saas' },
+    { name: 'Retool',               domain: 'retool.com',           career_url: 'https://retool.com/careers',                    ats_type: 'ashby',      ats_slug: 'retool',             category: 'saas' },
+    { name: 'Linear',               domain: 'linear.app',           career_url: 'https://linear.app/careers',                    ats_type: 'ashby',      ats_slug: 'linear',             category: 'saas' },
+    { name: 'Vercel',               domain: 'vercel.com',           career_url: 'https://vercel.com/careers',                    ats_type: 'ashby',      ats_slug: 'vercel',             category: 'saas' },
+    { name: 'Figma',                domain: 'figma.com',            career_url: 'https://figma.com/careers',                     ats_type: 'greenhouse', ats_slug: 'figma',              category: 'saas' },
+    { name: 'Doximity',             domain: 'doximity.com',         career_url: 'https://workat.doximity.com',                   ats_type: 'greenhouse', ats_slug: 'doximity',           category: 'saas' },
+    { name: 'Veeva Systems',        domain: 'veeva.com',            career_url: 'https://careers.veeva.com',                     ats_type: 'greenhouse', ats_slug: 'veeva',              category: 'saas' },
+    { name: 'Wiz',                  domain: 'wiz.io',               career_url: 'https://wiz.io/careers',                        ats_type: 'greenhouse', ats_slug: 'wiz',                category: 'saas' },
+    { name: 'Snyk',                 domain: 'snyk.io',              career_url: 'https://snyk.io/careers',                       ats_type: 'greenhouse', ats_slug: 'snyk',               category: 'saas' },
+
+    // ── Deep Tech / Robotics / Climate ────────────────────────────────────────
+    { name: 'Tesla',                domain: 'tesla.com',            career_url: 'https://tesla.com/careers',                     ats_type: 'greenhouse', ats_slug: 'tesla',              category: 'deeptech' },
+    { name: 'Waymo',                domain: 'waymo.com',            career_url: 'https://waymo.com/careers',                     ats_type: 'lever',      ats_slug: 'waymo',              category: 'deeptech' },
+    { name: 'Cruise',               domain: 'getcruise.com',        career_url: 'https://getcruise.com/careers',                 ats_type: 'greenhouse', ats_slug: 'cruise',             category: 'deeptech' },
+    { name: 'Aurora Innovation',    domain: 'aurora.tech',          career_url: 'https://aurora.tech/careers',                   ats_type: 'greenhouse', ats_slug: 'aurora-innovation',  category: 'deeptech' },
+    { name: 'Joby Aviation',        domain: 'jobyaviation.com',     career_url: 'https://jobyaviation.com/careers',              ats_type: 'greenhouse', ats_slug: 'jobyaviation',       category: 'deeptech' },
+    { name: 'Planet Labs',          domain: 'planet.com',           career_url: 'https://planet.com/careers',                    ats_type: 'greenhouse', ats_slug: 'planet-labs',        category: 'deeptech' },
+    { name: 'Helion Energy',        domain: 'helionenergy.com',     career_url: 'https://helionenergy.com/careers',              ats_type: 'greenhouse', ats_slug: 'helion',             category: 'deeptech' },
+    { name: 'Impossible Foods',     domain: 'impossible.com',       career_url: 'https://impossible.com/pages/careers',          ats_type: 'greenhouse', ats_slug: 'impossible-foods',   category: 'deeptech' },
+];
+
+export const BAY_AREA_PRESET = {
+    id: 'bay-area-opt',
+    label: 'Bay Area — OPT Friendly (100)',
+    description: 'FAANG, OpenAI, Stripe, Databricks, Airbnb + 95 more Bay Area H-1B sponsors.',
+    companies: BAY_AREA_COMPANIES,
+};

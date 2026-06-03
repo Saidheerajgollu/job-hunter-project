@@ -1,21 +1,53 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import fs from 'fs';
+/**
+ * Postgres data-access layer (Supabase-compatible).
+ *
+ * Replaces the previous better-sqlite3 store. All functions are async and use a
+ * single shared connection Pool. Set DATABASE_URL to your Supabase connection
+ * string (Settings → Database → Connection string → "URI"). SSL is enabled by
+ * default because Supabase requires it.
+ *
+ * Tables are created on boot via initDb() — no manual migration step needed.
+ */
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = path.join(__dirname, '../../data/jobs.db');
+import 'dotenv/config';
+import pg from 'pg';
 
-// Ensure data directory exists
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+const { Pool } = pg;
 
-const db = new Database(DB_PATH);
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+    console.error(
+        '\n❌ DATABASE_URL is not set.\n' +
+        '   Create a Supabase project → Settings → Database → Connection string (URI),\n' +
+        '   then put it in backend/.env as:  DATABASE_URL=postgresql://...\n'
+    );
+    process.exit(1);
+}
 
-// Enable WAL mode for better performance
-db.pragma('journal_mode = WAL');
+// Supabase requires SSL. rejectUnauthorized:false avoids the self-signed chain error.
+const useSSL = process.env.PGSSL !== 'false';
 
-// Create tables
-db.exec(`
+const pool = new Pool({
+    connectionString,
+    max: Number(process.env.PG_POOL_MAX || 5),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+    ssl: useSSL ? { rejectUnauthorized: false } : false,
+});
+
+pool.on('error', (err) => {
+    console.error('💥 Unexpected Postgres pool error:', err.message);
+});
+
+/** Run a parameterized query and return the rows. */
+export async function query(text, params = []) {
+    const res = await pool.query(text, params);
+    return res;
+}
+
+// ── Schema ──────────────────────────────────────────────────────────────────
+
+const SCHEMA = `
   CREATE TABLE IF NOT EXISTS jobs (
     id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
@@ -26,16 +58,16 @@ db.exec(`
     category TEXT NOT NULL,
     salary TEXT,
     description TEXT,
-    posted_at TEXT,
-    scraped_at TEXT NOT NULL DEFAULT (datetime('now')),
+    posted_at TIMESTAMPTZ,
+    scraped_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     status TEXT NOT NULL DEFAULT 'new',
-    is_new INTEGER NOT NULL DEFAULT 1
+    is_new BOOLEAN NOT NULL DEFAULT true
   );
 
   CREATE TABLE IF NOT EXISTS scrape_runs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    started_at TEXT NOT NULL DEFAULT (datetime('now')),
-    finished_at TEXT,
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at TIMESTAMPTZ,
     jobs_found INTEGER DEFAULT 0,
     jobs_new INTEGER DEFAULT 0,
     errors TEXT
@@ -46,97 +78,293 @@ db.exec(`
     value TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS watched_companies (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    domain TEXT,
+    career_url TEXT,
+    ats_type TEXT NOT NULL DEFAULT 'unknown',
+    ats_slug TEXT,
+    watch_roles TEXT NOT NULL DEFAULT '["software engineer","SWE","SDE","data engineer","machine learning"]',
+    last_checked TIMESTAMPTZ,
+    last_job_hash TEXT,
+    last_job_ids TEXT,
+    active_jobs_count INTEGER DEFAULT 0,
+    notify_count INTEGER DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active',
+    error_msg TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+
+  CREATE TABLE IF NOT EXISTS watch_notifications (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    company_id TEXT NOT NULL,
+    company_name TEXT NOT NULL,
+    job_title TEXT NOT NULL,
+    job_url TEXT NOT NULL,
+    sent_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  );
+
   CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
   CREATE INDEX IF NOT EXISTS idx_jobs_category ON jobs(category);
   CREATE INDEX IF NOT EXISTS idx_jobs_source ON jobs(source);
   CREATE INDEX IF NOT EXISTS idx_jobs_scraped_at ON jobs(scraped_at);
   CREATE INDEX IF NOT EXISTS idx_jobs_is_new ON jobs(is_new);
-`);
+  CREATE INDEX IF NOT EXISTS idx_watch_notifs_sent ON watch_notifications(sent_at);
+`;
 
-// Seed default settings
-const defaultSettings = {
-  keywords_ai: 'new grad AI engineer,new grad machine learning engineer,entry level AI engineer,2026 new grad AI',
-  keywords_swe: 'new grad software engineer,entry level software engineer,2026 new grad SWE,new grad full stack',
-  keywords_data: 'new grad data scientist,new grad data engineer,entry level data scientist,new grad analytics engineer',
-  scrape_interval_hours: '4',
-  filter_exclude_senior: 'true',
-  notification_enabled: 'true',
+const DEFAULT_SETTINGS = {
+    keywords_ai: 'new grad AI engineer,new grad machine learning engineer,entry level AI engineer,2026 new grad AI',
+    keywords_swe: 'new grad software engineer,entry level software engineer,2026 new grad SWE,new grad full stack',
+    keywords_data: 'new grad data scientist,new grad data engineer,entry level data scientist,new grad analytics engineer',
+    scrape_interval_hours: '1',
+    filter_exclude_senior: 'true',
+    notification_enabled: 'true',
 };
 
-const insertSetting = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
-for (const [key, value] of Object.entries(defaultSettings)) {
-  insertSetting.run(key, value);
+/** Create tables (idempotent) and seed default settings. Call once on boot. */
+export async function initDb() {
+    await pool.query(SCHEMA);
+    for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+        await pool.query(
+            'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING',
+            [key, value]
+        );
+    }
+    console.log('🗄️  Postgres schema ready');
 }
 
-// ── Prepared Statements ──────────────────────────────────────────────────────
+// ── Jobs ──────────────────────────────────────────────────────────────────────
 
-export const insertJob = db.prepare(`
-  INSERT OR IGNORE INTO jobs (id, title, company, location, url, source, category, salary, description, posted_at, status, is_new)
-  VALUES (@id, @title, @company, @location, @url, @source, @category, @salary, @description, @posted_at, 'new', 1)
-`);
-
-export const getJobs = db.prepare(`
-  SELECT * FROM jobs
-  WHERE
-    (:status IS NULL OR status = :status) AND
-    (:category IS NULL OR category = :category) AND
-    (:source IS NULL OR source = :source) AND
-    (:search IS NULL OR title LIKE :search OR company LIKE :search)
-  ORDER BY posted_at DESC, scraped_at DESC
-  LIMIT :limit OFFSET :offset
-`);
-
-export const countJobs = db.prepare(`
-  SELECT COUNT(*) as total FROM jobs
-  WHERE
-    (:status IS NULL OR status = :status) AND
-    (:category IS NULL OR category = :category) AND
-    (:source IS NULL OR source = :source) AND
-    (:search IS NULL OR title LIKE :search OR company LIKE :search)
-`);
-
-export const updateJobStatus = db.prepare(`
-  UPDATE jobs SET status = ?, is_new = 0 WHERE id = ?
-`);
-
-export const markAllSeen = db.prepare(`
-  UPDATE jobs SET is_new = 0 WHERE is_new = 1
-`);
-
-export const getStats = db.prepare(`
-  SELECT
-    COUNT(*) as total,
-    SUM(CASE WHEN is_new = 1 THEN 1 ELSE 0 END) as new_count,
-    SUM(CASE WHEN status = 'applied' THEN 1 ELSE 0 END) as applied,
-    SUM(CASE WHEN status = 'saved' THEN 1 ELSE 0 END) as saved,
-    SUM(CASE WHEN scraped_at >= datetime('now', '-24 hours') THEN 1 ELSE 0 END) as last_24h
-  FROM jobs
-`);
-
-export const getSettings = db.prepare('SELECT key, value FROM settings');
-
-export const upsertSetting = db.prepare(`
-  INSERT INTO settings (key, value) VALUES (?, ?)
-  ON CONFLICT(key) DO UPDATE SET value = excluded.value
-`);
-
-export const startScrapeRun = db.prepare(`
-  INSERT INTO scrape_runs (started_at) VALUES (datetime('now'))
-`);
-
-export const finishScrapeRun = db.prepare(`
-  UPDATE scrape_runs
-  SET finished_at = datetime('now'), jobs_found = ?, jobs_new = ?, errors = ?
-  WHERE id = ?
-`);
-
-export const getLastScrapeRun = db.prepare(`
-  SELECT * FROM scrape_runs ORDER BY started_at DESC LIMIT 1
-`);
-
-export function getAllSettings() {
-  const rows = getSettings.all();
-  return Object.fromEntries(rows.map(r => [r.key, r.value]));
+/** Insert a job, ignoring duplicates. Returns true if a new row was created. */
+export async function insertJob(job) {
+    const res = await pool.query(
+        `INSERT INTO jobs (id, title, company, location, url, source, category, salary, description, posted_at, status, is_new)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',true)
+         ON CONFLICT DO NOTHING`,
+        [
+            job.id, job.title, job.company, job.location ?? null, job.url, job.source,
+            job.category, job.salary ?? null, job.description ?? null, job.posted_at ?? null,
+        ]
+    );
+    return res.rowCount > 0;
 }
 
-export default db;
+const JOB_COLUMNS = `
+  id, title, company, location, url, source, category, salary, description,
+  posted_at, scraped_at, status,
+  is_new::int AS is_new,
+  (CASE WHEN scraped_at >= now() - interval '24 hours' THEN 1 ELSE 0 END) AS is_fresh
+`;
+
+const JOB_WHERE = `
+  ($1::text IS NULL OR status = $1)
+  AND ($2::text IS NULL OR category = $2)
+  AND ($3::text IS NULL OR source = $3)
+  AND ($4::text IS NULL OR title ILIKE $4 OR company ILIKE $4)
+  AND ($5::int = 0 OR scraped_at >= now() - interval '24 hours')
+`;
+
+export async function getJobs({ status, category, source, search, fresh_only, limit, offset }) {
+    const res = await pool.query(
+        `SELECT ${JOB_COLUMNS}
+         FROM jobs
+         WHERE ${JOB_WHERE}
+         ORDER BY scraped_at DESC, posted_at DESC NULLS LAST
+         LIMIT $6 OFFSET $7`,
+        [status, category, source, search, fresh_only, limit, offset]
+    );
+    return res.rows;
+}
+
+export async function countJobs({ status, category, source, search, fresh_only }) {
+    const res = await pool.query(
+        `SELECT COUNT(*)::int AS total FROM jobs WHERE ${JOB_WHERE}`,
+        [status, category, source, search, fresh_only]
+    );
+    return res.rows[0].total;
+}
+
+export async function updateJobStatus(status, id) {
+    const res = await pool.query(
+        'UPDATE jobs SET status = $1, is_new = false WHERE id = $2',
+        [status, id]
+    );
+    return res.rowCount;
+}
+
+export async function markAllSeen() {
+    await pool.query('UPDATE jobs SET is_new = false WHERE is_new = true');
+}
+
+export async function getStats() {
+    const res = await pool.query(`
+      SELECT
+        COUNT(*)::int AS total,
+        COALESCE(SUM(CASE WHEN is_new THEN 1 ELSE 0 END), 0)::int AS new_count,
+        COALESCE(SUM(CASE WHEN status = 'applied' THEN 1 ELSE 0 END), 0)::int AS applied,
+        COALESCE(SUM(CASE WHEN status = 'saved' THEN 1 ELSE 0 END), 0)::int AS saved,
+        COALESCE(SUM(CASE WHEN scraped_at >= now() - interval '24 hours' THEN 1 ELSE 0 END), 0)::int AS last_24h
+      FROM jobs
+    `);
+    return res.rows[0];
+}
+
+export async function getAllJobsForReclassify() {
+    const res = await pool.query('SELECT id, title, description FROM jobs');
+    return res.rows;
+}
+
+export async function updateJobCategory(category, id) {
+    const res = await pool.query('UPDATE jobs SET category = $1 WHERE id = $2', [category, id]);
+    return res.rowCount;
+}
+
+// ── Scrape Runs ────────────────────────────────────────────────────────────────
+
+export async function startScrapeRun() {
+    const res = await pool.query(
+        'INSERT INTO scrape_runs (started_at) VALUES (now()) RETURNING id'
+    );
+    return res.rows[0].id;
+}
+
+export async function finishScrapeRun(jobsFound, jobsNew, errors, id) {
+    await pool.query(
+        `UPDATE scrape_runs
+         SET finished_at = now(), jobs_found = $1, jobs_new = $2, errors = $3
+         WHERE id = $4`,
+        [jobsFound, jobsNew, errors, id]
+    );
+}
+
+export async function getLastScrapeRun() {
+    const res = await pool.query('SELECT * FROM scrape_runs ORDER BY started_at DESC LIMIT 1');
+    return res.rows[0] || null;
+}
+
+// ── Settings ────────────────────────────────────────────────────────────────
+
+export async function getAllSettings() {
+    const res = await pool.query('SELECT key, value FROM settings');
+    return Object.fromEntries(res.rows.map(r => [r.key, r.value]));
+}
+
+export async function getSetting(key) {
+    const res = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
+    return res.rows[0]?.value ?? null;
+}
+
+export async function upsertSetting(key, value) {
+    await pool.query(
+        `INSERT INTO settings (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+        [key, value]
+    );
+}
+
+// ── Watched Companies ─────────────────────────────────────────────────────────
+
+export async function getWatchedCompanies() {
+    const res = await pool.query('SELECT * FROM watched_companies ORDER BY created_at DESC');
+    return res.rows;
+}
+
+export async function getWatchedCompany(id) {
+    const res = await pool.query('SELECT * FROM watched_companies WHERE id = $1', [id]);
+    return res.rows[0] || null;
+}
+
+/** Insert a watched company, ignoring duplicates. Returns true if newly inserted. */
+export async function insertWatchedCompany(c) {
+    const res = await pool.query(
+        `INSERT INTO watched_companies
+           (id, name, domain, career_url, ats_type, ats_slug, watch_roles, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,'active')
+         ON CONFLICT (id) DO NOTHING`,
+        [c.id, c.name, c.domain ?? null, c.career_url ?? null, c.ats_type, c.ats_slug ?? null, c.watch_roles]
+    );
+    return res.rowCount > 0;
+}
+
+export async function deleteWatchedCompany(id) {
+    await pool.query('DELETE FROM watched_companies WHERE id = $1', [id]);
+}
+
+export async function updateWatchedCompanyState({ last_job_hash, last_job_ids, active_jobs_count, id }) {
+    await pool.query(
+        `UPDATE watched_companies
+         SET last_checked = now(), last_job_hash = $1, last_job_ids = $2,
+             active_jobs_count = $3, status = 'active', error_msg = NULL
+         WHERE id = $4`,
+        [last_job_hash, last_job_ids, active_jobs_count, id]
+    );
+}
+
+/** Persist a newly-discovered ATS for a company (e.g. found embedded in a custom page). */
+export async function updateWatchedCompanyAts({ ats_type, ats_slug, career_url, id }) {
+    await pool.query(
+        `UPDATE watched_companies
+         SET ats_type = $1, ats_slug = $2, career_url = COALESCE($3, career_url)
+         WHERE id = $4`,
+        [ats_type, ats_slug ?? null, career_url ?? null, id]
+    );
+}
+
+export async function updateWatchedCompanyError(errorMsg, id) {
+    await pool.query(
+        `UPDATE watched_companies
+         SET last_checked = now(), status = 'error', error_msg = $1
+         WHERE id = $2`,
+        [errorMsg, id]
+    );
+}
+
+export async function incrementWatchNotifyCount(id) {
+    await pool.query('UPDATE watched_companies SET notify_count = notify_count + 1 WHERE id = $1', [id]);
+}
+
+// ── Push Subscriptions ─────────────────────────────────────────────────────────
+
+export async function insertPushSubscription({ endpoint, p256dh, auth }) {
+    await pool.query(
+        `INSERT INTO push_subscriptions (endpoint, p256dh, auth)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth`,
+        [endpoint, p256dh, auth]
+    );
+}
+
+export async function deletePushSubscription(endpoint) {
+    await pool.query('DELETE FROM push_subscriptions WHERE endpoint = $1', [endpoint]);
+}
+
+export async function getAllPushSubscriptions() {
+    const res = await pool.query('SELECT * FROM push_subscriptions');
+    return res.rows;
+}
+
+// ── Watch Notifications Log ─────────────────────────────────────────────────────
+
+export async function insertWatchNotification({ company_id, company_name, job_title, job_url }) {
+    await pool.query(
+        `INSERT INTO watch_notifications (company_id, company_name, job_title, job_url)
+         VALUES ($1, $2, $3, $4)`,
+        [company_id, company_name, job_title, job_url]
+    );
+}
+
+export async function getRecentWatchNotifications() {
+    const res = await pool.query('SELECT * FROM watch_notifications ORDER BY sent_at DESC LIMIT 20');
+    return res.rows;
+}
+
+export default pool;

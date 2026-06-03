@@ -2,13 +2,27 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, Job, Stats, JobFilters } from '@/lib/api';
+import { WatchlistPanel, NotificationBell } from '@/components/WatchlistPanel';
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
+// SQLite stores UTC datetimes without 'Z' (e.g. "2026-03-19 21:43:01").
+// JS parses those as local time, making them hours off. Fix by normalizing to UTC.
+function toUTC(dateStr: string): Date {
+    if (!dateStr) return new Date(NaN);
+    // Already has timezone info — parse as-is
+    if (dateStr.includes('Z') || dateStr.includes('+') || dateStr.includes('-', 10)) {
+        return new Date(dateStr);
+    }
+    // SQLite format: "YYYY-MM-DD HH:MM:SS" → treat as UTC
+    return new Date(dateStr.replace(' ', 'T') + 'Z');
+}
+
 function timeAgo(dateStr: string) {
-    const d = new Date(dateStr);
+    const d = toUTC(dateStr);
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
+    if (diffMs < 0) return 'just now';
     const mins = Math.floor(diffMs / 60000);
     if (mins < 60) return `${mins}m ago`;
     const hours = Math.floor(mins / 60);
@@ -18,7 +32,7 @@ function timeAgo(dateStr: string) {
 
 function formatDate(dateStr: string) {
     if (!dateStr) return 'Date unknown';
-    const d = new Date(dateStr);
+    const d = toUTC(dateStr);
     if (isNaN(d.getTime())) return 'Date unknown';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
@@ -58,21 +72,18 @@ function StatsBar({ stats }: { stats: Stats | null }) {
         : 'Never';
 
     const items = [
-        { icon: '🔍', label: 'Total Jobs', value: stats?.total ?? '—', color: '#4c6ef5' },
-        { icon: '✨', label: '🆕 New (unseen)', value: stats?.new_count ?? '—', color: '#748ffc' },
-        { icon: '📅', label: 'Last 24 Hours', value: stats?.last_24h ?? '—', color: '#20c997' },
-        { icon: '✅', label: 'Applied', value: stats?.applied ?? '—', color: '#20c997' },
-        { icon: '🕐', label: 'Last Scraped', value: lastRunTime, color: '#8892b0', isText: true },
+        { label: 'Total', value: stats?.total ?? '—' },
+        { label: 'Unseen', value: stats?.new_count ?? '—' },
+        { label: 'Last 24h', value: stats?.last_24h ?? '—' },
+        { label: 'Applied', value: stats?.applied ?? '—' },
+        { label: 'Last sync', value: lastRunTime, small: true },
     ];
 
     return (
         <div className="stats-bar">
             {items.map((item) => (
                 <div key={item.label} className="stat-card">
-                    <div className="stat-icon" style={{ background: `${item.color}22` }}>
-                        {item.icon}
-                    </div>
-                    <div className="stat-value" style={item.isText ? { fontSize: '18px' } : {}}>
+                    <div className={`stat-value${item.small ? ' stat-value-sm' : ''}`}>
                         {item.value}
                     </div>
                     <div className="stat-label">{item.label}</div>
@@ -92,28 +103,33 @@ interface FilterBarProps {
 }
 
 const CATEGORIES = [
-    { value: '', label: 'All' },
-    { value: 'swe', label: '💻 Software Eng' },
-    { value: 'fullstack', label: '🌐 Full Stack' },
-    { value: 'ai', label: '🤖 AI Engineer' },
-    { value: 'ml', label: '🧠 ML Engineer' },
-    { value: 'data-science', label: '📊 Data Science' },
-    { value: 'data-engineer', label: '🛢️ Data Engineer' },
-    { value: 'data-analyst', label: '📈 Data Analyst' },
-    { value: 'devops', label: '☁️ DevOps/Cloud' },
+    { value: '', label: 'All roles' },
+    { value: 'swe', label: 'Software Eng' },
+    { value: 'frontend', label: 'Frontend' },
+    { value: 'backend', label: 'Backend' },
+    { value: 'fullstack', label: 'Full Stack' },
+    { value: 'ai', label: 'AI Engineer' },
+    { value: 'ml', label: 'ML Engineer' },
+    { value: 'data-science', label: 'Data Science' },
+    { value: 'data-engineer', label: 'Data Engineer' },
+    { value: 'data-analyst', label: 'Data Analyst' },
+    { value: 'devops', label: 'DevOps / Cloud' },
 ];
 
 const SOURCES = [
-    { value: '', label: 'All Sources' },
-    { value: 'simplifyjobs', label: '⭐ SimplifyJobs' },
-    { value: 'adzuna', label: '🌐 Adzuna' },
-    { value: 'linkedin', label: 'LinkedIn' },
-    { value: 'indeed', label: 'Indeed' },
+    { value: '', label: 'All sources' },
     { value: 'greenhouse', label: 'Greenhouse' },
     { value: 'lever', label: 'Lever' },
+    { value: 'ashby', label: 'Ashby' },
     { value: 'workday', label: 'Workday' },
-    { value: 'direct', label: 'Direct' },
+    { value: 'simplifyjobs', label: 'SimplifyJobs' },
+    { value: 'jsearch', label: 'JSearch' },
+    { value: 'fantasticjobs', label: 'Fantastic.jobs' },
+    { value: 'remoteok', label: 'RemoteOK' },
+    { value: 'remotive', label: 'Remotive' },
+    { value: 'adzuna', label: 'Adzuna' },
 ];
+
 
 function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
     const [search, setSearch] = useState(filters.search || '');
@@ -126,51 +142,56 @@ function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
     }
 
     return (
-        <div className="filter-bar">
-            <div className="search-input-wrapper">
-                <span className="search-input-icon">🔍</span>
-                <input
-                    className="search-input"
-                    placeholder="Search jobs or companies..."
-                    value={search}
-                    onChange={e => handleSearch(e.target.value)}
-                />
+        <div className="filter-panel">
+            <div className="filter-row filter-row-top">
+                <div className="search-input-wrapper">
+                    <input
+                        className="search-input"
+                        placeholder="Search title or company..."
+                        value={search}
+                        onChange={e => handleSearch(e.target.value)}
+                        suppressHydrationWarning
+                    />
+                </div>
+                <select
+                    className="source-select"
+                    value={filters.source || ''}
+                    onChange={e => onChange({ source: e.target.value, page: 1 })}
+                    aria-label="Filter by source"
+                >
+                    {SOURCES.map(s => (
+                        <option key={s.value || 'all'} value={s.value}>{s.label}</option>
+                    ))}
+                </select>
+                <button
+                    className="btn btn-primary"
+                    onClick={onScrape}
+                    disabled={scraping}
+                >
+                    {scraping ? 'Syncing…' : 'Sync now'}
+                </button>
             </div>
-
-            <div className="filter-chips">
-                <span className="filter-label">Category:</span>
-                {CATEGORIES.map(c => (
+            <div className="filter-row">
+                <span className="filter-chips-label">Role</span>
+                <div className="filter-chips">
                     <button
-                        key={c.value}
-                        className={`chip ${filters.category === c.value ? 'active' : ''}`}
-                        onClick={() => onChange({ category: c.value, page: 1 })}
+                        className={`chip chip-fresh ${filters.fresh_only === '1' ? 'active' : ''}`}
+                        onClick={() => onChange({ fresh_only: filters.fresh_only === '1' ? '' : '1', page: 1 })}
+                        title="Jobs found in the last 24 hours"
                     >
-                        {c.label}
+                        Today
                     </button>
-                ))}
+                    {CATEGORIES.map(c => (
+                        <button
+                            key={c.value}
+                            className={`chip ${filters.category === c.value ? 'active' : ''}`}
+                            onClick={() => onChange({ category: c.value, page: 1 })}
+                        >
+                            {c.label}
+                        </button>
+                    ))}
+                </div>
             </div>
-
-            <div className="filter-chips">
-                <span className="filter-label">Source:</span>
-                {SOURCES.map(s => (
-                    <button
-                        key={s.value}
-                        className={`chip ${filters.source === s.value ? 'active' : ''}`}
-                        onClick={() => onChange({ source: s.value, page: 1 })}
-                    >
-                        {s.label}
-                    </button>
-                ))}
-            </div>
-
-            <button
-                className="btn btn-primary"
-                onClick={onScrape}
-                disabled={scraping}
-                style={{ marginLeft: 'auto', flexShrink: 0 }}
-            >
-                {scraping ? '⏳ Scraping...' : '🚀 Scrape Now'}
-            </button>
         </div>
     );
 }
@@ -205,28 +226,30 @@ function JobCard({
                 <div className="job-title">{job.title}</div>
                 <div className="job-company">{job.company}</div>
                 <div className="job-meta">
-                    {job.location && <span className="job-meta-item">📍 {job.location}</span>}
-                    {job.salary && <span className="job-meta-item">💰 {job.salary}</span>}
-                    <span className="job-meta-item">📅 Posted {formatDate(job.posted_at || job.scraped_at)}</span>
-                    <span className="job-meta-item" style={{ opacity: 0.6 }}>🕐 Scraped {timeAgo(job.scraped_at)}</span>
+                    {job.location && <span className="job-meta-item">{job.location}</span>}
+                    {job.salary && <span className="job-meta-item">{job.salary}</span>}
+                    <span className="job-meta-item">Posted {formatDate(job.posted_at || job.scraped_at)}</span>
+                    <span className="job-meta-item">Synced {timeAgo(job.scraped_at)}</span>
                 </div>
             </div>
 
             <div className="job-badges">
-                {job.is_new === 1 && <span className="badge badge-new">NEW</span>}
+                {job.is_fresh === 1 && <span className="badge badge-fresh">Today</span>}
+                {job.is_new === 1 && <span className="badge badge-new">New</span>}
+                <span className="badge badge-source">{formatSource(job.source)}</span>
                 <span className={`badge badge-cat-${job.category}`}>
                     {job.category === 'ai' ? 'AI Eng' :
-                        job.category === 'ml' ? 'ML Eng' :
-                            job.category === 'fullstack' ? 'Full Stack' :
-                                job.category === 'data-science' ? 'Data Science' :
-                                    job.category === 'data-engineer' ? 'Data Eng' :
-                                        job.category === 'data-analyst' ? 'Data Analyst' :
-                                            job.category === 'devops' ? 'DevOps' :
-                                                'SWE'}
+                     job.category === 'ml' ? 'ML Eng' :
+                     job.category === 'data-science' ? 'Data Sci' :
+                     job.category === 'data-engineer' ? 'Data Eng' :
+                     job.category === 'data-analyst' ? 'Data Analyst' :
+                     job.category === 'fullstack' ? 'Full Stack' :
+                     job.category === 'devops' ? 'DevOps' :
+                     job.category?.charAt(0).toUpperCase() + job.category?.slice(1)}
                 </span>
-                <span className={`badge badge-${job.source}`}>{job.source}</span>
-                {job.status === 'applied' && <span className="badge badge-applied">✓ Applied</span>}
-                {job.status === 'saved' && <span className="badge badge-saved">⭐ Saved</span>}
+
+                {job.status === 'applied' && <span className="badge badge-applied">Applied</span>}
+                {job.status === 'saved' && <span className="badge badge-saved">Saved</span>}
             </div>
 
             <div className="job-actions">
@@ -239,14 +262,14 @@ function JobCard({
                         if (job.status === 'new') onStatusChange(job.id, 'applied');
                     }}
                 >
-                    Apply →
+                    Apply
                 </a>
                 {job.status !== 'saved' && job.status !== 'applied' && (
                     <button
                         className="btn btn-secondary btn-sm"
                         onClick={() => onStatusChange(job.id, 'saved')}
                     >
-                        ⭐ Save
+                        Save
                     </button>
                 )}
                 {job.status === 'applied' ? (
@@ -266,13 +289,35 @@ function JobCard({
     );
 }
 
-// ── Status Tabs ───────────────────────────────────────────────────────────────
+function formatSource(source: string) {
+    const labels: Record<string, string> = {
+        greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', workday: 'Workday',
+        simplifyjobs: 'SimplifyJobs', jsearch: 'JSearch', fantasticjobs: 'Fantastic.jobs',
+        remoteok: 'RemoteOK', remotive: 'Remotive', adzuna: 'Adzuna', direct: 'Direct',
+        himalayas: 'Himalayas', weworkremotely: 'WWR',
+    };
+    return labels[source] || source;
+}
+
+// ── Applied Tracker Banner ────────────────────────────────────────────────────
+
+function AppliedBanner({ count }: { count: number }) {
+    if (count === 0) return null;
+    return (
+        <div className="applied-banner">
+            <div>
+                <strong>{count} application{count !== 1 ? 's' : ''} tracked</strong>
+                <span> — click Apply → on any job to auto-mark it here</span>
+            </div>
+        </div>
+    );
+}
 
 const STATUS_TABS = [
     { value: '', label: 'All' },
     { value: 'new', label: 'New' },
-    { value: 'saved', label: '⭐ Saved' },
-    { value: 'applied', label: '✅ Applied' },
+    { value: 'saved', label: 'Saved' },
+    { value: 'applied', label: 'Applied' },
     { value: 'ignored', label: 'Hidden' },
 ];
 
@@ -322,7 +367,7 @@ export default function Home() {
         setScraping(true);
         try {
             await api.triggerScrape();
-            showToast('🚀 Scrape started! Check back in a few minutes.', 'success');
+            showToast('Sync started — new jobs appear in a few minutes.', 'success');
             setTimeout(() => { fetchJobs(filters); fetchStats(); }, 5000);
         } catch {
             showToast('Failed to trigger scrape', 'error');
@@ -349,16 +394,13 @@ export default function Home() {
             {/* Navbar */}
             <nav className="navbar">
                 <a href="/" className="navbar-brand">
-                    <div className="navbar-brand-icon">🎯</div>
-                    <span>Job<span className="highlight">Hunter</span> Pro</span>
+                    <span className="navbar-brand-icon" aria-hidden />
+                    Job Hunter
                 </a>
                 <div className="navbar-actions">
-                    <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                        Graduating May 2026
-                    </span>
-                    <a href="/settings" className="btn btn-secondary">
-                        ⚙️ Settings
-                    </a>
+                    <span className="navbar-tag">2026 new grad</span>
+                    <span className="navbar-divider" aria-hidden />
+                    <a href="/settings" className="btn btn-ghost btn-sm">Settings</a>
                 </div>
             </nav>
 
@@ -366,12 +408,13 @@ export default function Home() {
                 {/* Header */}
                 <div className="page-header">
                     <div>
-                        <h1 className="page-title">Job Board</h1>
+                        <h1 className="page-title">Jobs</h1>
                         <p className="page-subtitle">
-                            Aggregating AI, SWE & Data roles from LinkedIn, Indeed, Greenhouse, Lever, Workday & more
+                            New grad roles in AI, software, and data — synced hourly from 11 sources.
                         </p>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div className="page-actions">
+                        <NotificationBell />
                         {stats?.new_count ? (
                             <button
                                 className="btn btn-ghost btn-sm"
@@ -391,7 +434,7 @@ export default function Home() {
                 <StatsBar stats={stats} />
 
                 {/* Status Tabs */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                <div className="toolbar">
                     <div className="status-tabs">
                         {STATUS_TABS.map(tab => (
                             <button
@@ -403,10 +446,12 @@ export default function Home() {
                             </button>
                         ))}
                     </div>
-                    <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                        {total} job{total !== 1 ? 's' : ''} found
-                    </div>
+                    <span className="result-count">
+                        {total.toLocaleString()} result{total !== 1 ? 's' : ''}
+                    </span>
                 </div>
+
+                {filters.status === 'applied' && <AppliedBanner count={stats?.applied ?? total} />}
 
                 {/* Filters */}
                 <FilterBar
@@ -416,20 +461,28 @@ export default function Home() {
                     scraping={scraping}
                 />
 
+                {/* Watchlist */}
+                <WatchlistPanel />
+
                 {/* Jobs */}
                 {loading ? (
-                    <div className="loading-wrapper"><div className="spinner" /></div>
+                    <div className="loading-wrapper">
+                        <div className="spinner" />
+                        <span>Loading jobs…</span>
+                    </div>
                 ) : jobs.length === 0 ? (
                     <div className="empty-state">
-                        <div className="empty-icon">🔍</div>
+                        <div className="empty-icon">∅</div>
                         <div className="empty-title">No jobs found</div>
                         <div className="empty-desc">
-                            {Object.keys(filters).filter(k => filters[k as keyof JobFilters]).length > 2
-                                ? 'Try adjusting your filters or click "Scrape Now" to fetch the latest jobs.'
-                                : 'Click "🚀 Scrape Now" above to fetch fresh jobs from all sources.'}
+                            {filters.status === 'applied'
+                                ? 'No applications tracked yet. Click Apply on any job to mark it here.'
+                                : Object.keys(filters).filter(k => filters[k as keyof JobFilters]).length > 2
+                                ? 'Try adjusting your filters or sync to fetch the latest listings.'
+                                : 'Run a sync to pull fresh roles from Greenhouse, Lever, Ashby, and more.'}
                         </div>
                         <button className="btn btn-primary" onClick={handleScrape} disabled={scraping}>
-                            {scraping ? '⏳ Scraping...' : '🚀 Scrape Now'}
+                            {scraping ? 'Syncing…' : 'Sync now'}
                         </button>
                     </div>
                 ) : (
@@ -478,7 +531,7 @@ export default function Home() {
             <div className="toast-container">
                 {toasts.map(t => (
                     <div key={t.id} className={`toast ${t.type}`}>
-                        {t.type === 'success' ? '✅' : '❌'} {t.msg}
+                        {t.msg}
                     </div>
                 ))}
             </div>

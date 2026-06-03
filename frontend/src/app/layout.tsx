@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-    title: 'Job Hunter Pro — New Grad AI/SWE/Data Jobs',
-    description: 'Personal job aggregator that scrapes LinkedIn, Indeed, Greenhouse, Lever, Workday and more every 4 hours — built for 2026 new grad candidates.',
+    title: 'Job Hunter Pro — New Grad AI / SWE / Data Jobs',
+    description: 'Personal job aggregator for 2026 new grads. Syncs Greenhouse, Lever, Ashby, Workday, and 7 more sources hourly. Track applications, watch companies, get push alerts.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

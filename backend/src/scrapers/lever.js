@@ -9,13 +9,21 @@ import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpe
 const LEVER_COMPANIES = [
     // AI / ML
     'openai', 'anthropic', 'scale-ai', 'cohere', 'x-ai',
-    'character', 'deepmind', 'waymo', 'cruise',
+    'character', 'waymo', 'cruise', 'imbue',
     // Big Tech adjacent
     'netflix', 'reddit', 'discord', 'ramp', 'benchling', 'rippling',
     'vercel', 'retool', 'linear', 'amplitude', 'segment',
-    // SWE
+    // SWE / Fintech
     'coinbase', 'duolingo', 'canva', 'figma', 'notion', 'coda',
     'lattice', 'carta', 'chime', 'affirm',
+    // Infra / DevTools
+    'cloudinary', 'mux', 'livekit', 'posthog', 'sourcegraph',
+    'fly', 'railway', 'render', 'appsmith', 'backstage',
+    // B2B SaaS
+    'hubspot', 'zendesk', 'intercom', 'calendly', 'zapier',
+    'clickup', 'monday', 'airtable', 'deel', 'remote',
+    // Quant / Finance
+    'citadel', 'citadelsecurities', 'sig', 'drw', 'imc',
 ];
 
 const NEW_GRAD_KEYWORDS = [
@@ -31,10 +39,11 @@ function isNewGrad(title, tags = []) {
 
 // classifyCategory imported from helpers
 
-export async function scrapeLever(filterSenior = true) {
+export async function scrapeLever(filterSenior = true, extraCompanies = []) {
     const jobs = [];
+    const allCompanies = [...new Set([...LEVER_COMPANIES, ...extraCompanies])];
 
-    for (const company of LEVER_COMPANIES) {
+    for (const company of allCompanies) {
         try {
             const url = `https://api.lever.co/v0/postings/${company}?mode=json&commitment=fulltime`;
             const resp = await fetch(url, {

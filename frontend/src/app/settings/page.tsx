@@ -28,51 +28,54 @@ export default function SettingsPage() {
         }
     }
 
+    const seniorFilterOn = settings.filter_exclude_senior !== 'false';
+
     return (
         <div className="app-layout">
             <nav className="navbar">
                 <a href="/" className="navbar-brand">
-                    <div className="navbar-brand-icon">🎯</div>
-                    <span>Job<span className="highlight">Hunter</span> Pro</span>
+                    <span className="navbar-brand-icon" aria-hidden />
+                    Job Hunter
                 </a>
                 <div className="navbar-actions">
-                    <a href="/" className="btn btn-secondary">← Dashboard</a>
+                    <a href="/" className="btn btn-ghost btn-sm">Back to jobs</a>
                 </div>
             </nav>
 
             <main className="main-content">
                 <div className="page-header">
                     <div>
-                        <h1 className="page-title">⚙️ Settings</h1>
-                        <p className="page-subtitle">Configure your job search keywords and preferences</p>
+                        <h1 className="page-title">Settings</h1>
+                        <p className="page-subtitle">Keywords, filters, and scrape preferences.</p>
                     </div>
                     <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                        {saving ? 'Saving...' : saved ? '✅ Saved!' : '💾 Save Settings'}
+                        {saving ? 'Saving…' : saved ? 'Saved' : 'Save changes'}
                     </button>
                 </div>
 
                 {loading ? (
-                    <div className="loading-wrapper"><div className="spinner" /></div>
+                    <div className="loading-wrapper">
+                        <div className="spinner" />
+                        <span>Loading settings…</span>
+                    </div>
                 ) : (
                     <div className="settings-container">
-                        {/* Keywords */}
                         <div className="settings-section">
-                            <div className="settings-section-title">🔍 Search Keywords</div>
+                            <div className="settings-section-title">Search keywords</div>
 
                             <div className="settings-field">
-                                <label className="settings-label">🤖 AI / ML Keywords (comma-separated)</label>
+                                <label className="settings-label">AI / ML</label>
                                 <textarea
                                     className="settings-input settings-textarea"
                                     value={settings.keywords_ai || ''}
                                     onChange={e => update('keywords_ai', e.target.value)}
+                                    placeholder="new grad AI engineer, entry level machine learning…"
                                 />
-                                <p className="settings-help">
-                                    e.g. new grad AI engineer, entry level machine learning, junior LLM engineer
-                                </p>
+                                <p className="settings-help">Comma-separated. Used by optional JSearch queries.</p>
                             </div>
 
                             <div className="settings-field">
-                                <label className="settings-label">💻 SWE Keywords</label>
+                                <label className="settings-label">Software engineering</label>
                                 <textarea
                                     className="settings-input settings-textarea"
                                     value={settings.keywords_swe || ''}
@@ -81,7 +84,7 @@ export default function SettingsPage() {
                             </div>
 
                             <div className="settings-field">
-                                <label className="settings-label">📊 Data Keywords</label>
+                                <label className="settings-label">Data</label>
                                 <textarea
                                     className="settings-input settings-textarea"
                                     value={settings.keywords_data || ''}
@@ -90,69 +93,45 @@ export default function SettingsPage() {
                             </div>
                         </div>
 
-                        {/* Schedule */}
                         <div className="settings-section">
-                            <div className="settings-section-title">⏰ Scrape Schedule</div>
-                            <div className="settings-field">
-                                <label className="settings-label">Scrape Interval (hours)</label>
-                                <input
-                                    type="number"
-                                    className="settings-input"
-                                    style={{ maxWidth: '120px' }}
-                                    min={1}
-                                    max={24}
-                                    value={settings.scrape_interval_hours || '4'}
-                                    onChange={e => update('scrape_interval_hours', e.target.value)}
-                                />
-                                <p className="settings-help">
-                                    Default: 4 hours. Restart the backend server after changing this.
-                                </p>
-                            </div>
-                        </div>
-
-                        {/* Filters */}
-                        <div className="settings-section">
-                            <div className="settings-section-title">🎯 Job Filters</div>
-                            <div className="settings-field" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                <label className="settings-label" style={{ margin: 0 }}>
-                                    Auto-filter senior / staff / principal roles
-                                </label>
+                            <div className="settings-section-title">Filters</div>
+                            <div className="settings-toggle-row">
+                                <div>
+                                    <div className="settings-label" style={{ marginBottom: 4 }}>Exclude senior roles</div>
+                                    <p className="settings-help" style={{ marginTop: 0 }}>
+                                        Hides Senior, Staff, Principal, Lead, and Manager titles.
+                                    </p>
+                                </div>
                                 <button
-                                    className={`chip ${settings.filter_exclude_senior !== 'false' ? 'active' : ''}`}
-                                    onClick={() => update('filter_exclude_senior', settings.filter_exclude_senior === 'false' ? 'true' : 'false')}
+                                    type="button"
+                                    className={`chip ${seniorFilterOn ? 'active' : ''}`}
+                                    onClick={() => update('filter_exclude_senior', seniorFilterOn ? 'false' : 'true')}
                                 >
-                                    {settings.filter_exclude_senior !== 'false' ? '✅ ON' : '❌ OFF'}
+                                    {seniorFilterOn ? 'On' : 'Off'}
                                 </button>
                             </div>
-                            <p className="settings-help" style={{ marginTop: '8px' }}>
-                                When ON, jobs with titles containing "Senior", "Staff", "Principal", "Lead", "Manager", etc. are excluded.
-                            </p>
                         </div>
 
-                        {/* About */}
                         <div className="settings-section">
-                            <div className="settings-section-title">ℹ️ About</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', fontSize: '13px', color: 'var(--text-secondary)' }}>
+                            <div className="settings-section-title">About</div>
+                            <div className="settings-about-grid">
                                 <div>
-                                    <strong style={{ color: 'var(--text-primary)' }}>Sources scraped:</strong>
-                                    <ul style={{ marginTop: '8px', paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        <li>LinkedIn Jobs</li>
-                                        <li>Indeed</li>
-                                        <li>Greenhouse (30+ companies)</li>
-                                        <li>Lever (30+ companies)</li>
-                                        <li>Workday (FAANG + more)</li>
-                                        <li>Direct career pages</li>
+                                    <strong>Sources</strong>
+                                    <ul>
+                                        <li>Greenhouse, Lever, Ashby, Workday</li>
+                                        <li>SimplifyJobs community feed</li>
+                                        <li>RemoteOK, Remotive, Himalayas, WWR</li>
+                                        <li>Adzuna & JSearch (optional keys)</li>
                                     </ul>
                                 </div>
                                 <div>
-                                    <strong style={{ color: 'var(--text-primary)' }}>Companies targeted:</strong>
-                                    <ul style={{ marginTop: '8px', paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        <li>OpenAI, Anthropic, Cohere</li>
-                                        <li>Google, Meta, Apple, Microsoft</li>
-                                        <li>Databricks, Snowflake, Hugging Face</li>
-                                        <li>Stripe, Figma, Notion, Airbnb</li>
-                                        <li>Cloudflare, Datadog, Palantir</li>
-                                        <li>+ 50 more automatically</li>
+                                    <strong>Features</strong>
+                                    <ul>
+                                        <li>Company watchlist + push alerts</li>
+                                        <li>250+ OPT-friendly presets</li>
+                                        <li>ATS auto-detection</li>
+                                        <li>Application tracking</li>
+                                        <li>Supabase Postgres storage</li>
                                     </ul>
                                 </div>
                             </div>

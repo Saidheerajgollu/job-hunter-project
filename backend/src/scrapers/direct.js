@@ -3,7 +3,7 @@
  * Targets graduate-focused boards and direct company career pages.
  */
 
-import { makeJobId, isSeniorRole, sleep } from '../utils/helpers.js';
+import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
 
 // Direct company career pages with structured JSON feeds
 const DIRECT_CAREER_FEEDS = [
@@ -63,14 +63,6 @@ const NEW_GRAD_KEYWORDS = [
 function isNewGrad(title) {
     const lower = title.toLowerCase();
     return NEW_GRAD_KEYWORDS.some(kw => lower.includes(kw));
-}
-
-function classifyCategory(title) {
-    const lower = title.toLowerCase();
-    if (lower.includes('machine learning') || lower.includes(' ml') || lower.includes('ai ') ||
-        lower.includes('llm') || lower.includes('nlp') || lower.includes('deep learning')) return 'ai';
-    if (lower.includes('data scientist') || lower.includes('data engineer') || lower.includes('analytics')) return 'data';
-    return 'swe';
 }
 
 async function fetchGreenhouseFeed(feed, filterSenior) {

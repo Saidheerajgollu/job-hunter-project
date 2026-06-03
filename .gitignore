@@ -9,8 +9,11 @@ out/
 build/
 dist/
 
-# SQLite database (local data — don't commit)
+# Legacy local SQLite database (no longer used — kept ignored for safety)
 backend/data/
+*.db
+*.db-shm
+*.db-wal
 
 # Environment files
 .env
@@ -32,6 +35,5 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Playwright browsers (downloaded separately)
-/ms-playwright/
-data/
+# TypeScript build info
+*.tsbuildinfo

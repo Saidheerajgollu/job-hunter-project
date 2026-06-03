@@ -7,7 +7,7 @@
  * Set env vars: ADZUNA_APP_ID and ADZUNA_APP_KEY
  */
 
-import { makeJobId, isSeniorRole, parsePostedAt, sleep } from '../utils/helpers.js';
+import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
 
 const ADZUNA_BASE = 'https://api.adzuna.com/v1/api/jobs';
 
@@ -32,16 +32,6 @@ const QUERIES = {
 
 // Countries to search — add more as needed
 const COUNTRIES = ['us'];  // 'gb', 'ca', 'au' also available on free tier
-
-function classifyCategory(title) {
-    const lower = title.toLowerCase();
-    if (lower.includes('machine learning') || lower.includes(' ml ') ||
-        lower.includes('ai ') || lower.includes('llm') || lower.includes('nlp') ||
-        lower.includes('deep learning')) return 'ai';
-    if (lower.includes('data scientist') || lower.includes('data engineer') ||
-        lower.includes('analytics') || lower.includes('data analyst')) return 'data';
-    return 'swe';
-}
 
 async function searchAdzuna(appId, appKey, country, query, category) {
     const params = new URLSearchParams({
@@ -97,6 +87,10 @@ export async function scrapeAdzuna(filterSenior = true) {
                     const jobUrl = result.redirect_url || result.adref || '';
                     if (!jobUrl) continue;
 
+                    const description = result.description?.slice(0, 500) || null;
+                    const resolvedCategory = classifyCategory(title, description || '');
+                    if (!resolvedCategory) continue; // skip non-tech roles
+
                     jobs.push({
                         id: makeJobId(`adzuna-${result.id || jobUrl}`),
                         title,
@@ -104,11 +98,11 @@ export async function scrapeAdzuna(filterSenior = true) {
                         location: result.location?.display_name || 'US',
                         url: jobUrl,
                         source: 'adzuna',
-                        category: classifyCategory(title),
+                        category: resolvedCategory,
                         salary: result.salary_min
                             ? `$${Math.round(result.salary_min / 1000)}k–$${Math.round(result.salary_max / 1000)}k`
                             : null,
-                        description: result.description?.slice(0, 500) || null,
+                        description,
                         posted_at: result.created
                             ? new Date(result.created).toISOString()
                             : new Date().toISOString(),

@@ -8,13 +8,14 @@ export interface Job {
     location: string;
     url: string;
     source: string;
-    category: 'swe' | 'fullstack' | 'ai' | 'ml' | 'data-science' | 'data-engineer' | 'data-analyst' | 'devops';
+    category: 'swe' | 'frontend' | 'backend' | 'fullstack' | 'ai' | 'ml' | 'data-science' | 'data-engineer' | 'data-analyst' | 'devops';
     salary: string | null;
     description: string | null;
     posted_at: string;
     scraped_at: string;
     status: 'new' | 'saved' | 'applied' | 'ignored';
     is_new: number;
+    is_fresh: number;
 }
 
 export interface JobsResponse {
@@ -45,8 +46,41 @@ export interface JobFilters {
     category?: string;
     source?: string;
     search?: string;
+    fresh_only?: string;
     page?: number;
     limit?: number;
+}
+
+export interface WatchedCompany {
+    id: string;
+    name: string;
+    domain: string | null;
+    career_url: string | null;
+    ats_type: string;
+    ats_slug: string | null;
+    watch_roles: string; // JSON string
+    last_checked: string | null;
+    active_jobs_count: number;
+    notify_count: number;
+    status: 'active' | 'paused' | 'error';
+    error_msg: string | null;
+    created_at: string;
+}
+
+export interface ATSDetectResult {
+    ats_type: string;
+    ats_slug: string | null;
+    career_url: string | null;
+    supported: boolean;
+}
+
+export interface WatchNotification {
+    id: number;
+    company_id: string;
+    company_name: string;
+    job_title: string;
+    job_url: string;
+    sent_at: string;
 }
 
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
@@ -90,5 +124,51 @@ export const api = {
         apiFetch<{ ok: boolean; settings: Record<string, string> }>('/settings', {
             method: 'POST',
             body: JSON.stringify(settings),
+        }),
+
+    // Watched companies
+    getWatchedCompanies: () => apiFetch<WatchedCompany[]>('/companies'),
+
+    detectATS: (name: string, domain?: string) =>
+        apiFetch<ATSDetectResult>('/companies/detect', {
+            method: 'POST',
+            body: JSON.stringify({ name, domain }),
+        }),
+
+    addWatchedCompany: (data: { name: string; domain?: string; ats_type?: string; ats_slug?: string; career_url?: string; watch_roles?: string[] }) =>
+        apiFetch<{ ok: boolean; company: WatchedCompany }>('/companies', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        }),
+
+    removeWatchedCompany: (id: string) =>
+        apiFetch<{ ok: boolean }>(`/companies/${id}`, { method: 'DELETE' }),
+
+    // Push notifications
+    getVapidPublicKey: () => apiFetch<{ key: string }>('/push/vapid-public-key'),
+
+    savePushSubscription: (sub: PushSubscriptionJSON) =>
+        apiFetch<{ ok: boolean }>('/push/subscribe', {
+            method: 'POST',
+            body: JSON.stringify(sub),
+        }),
+
+    removePushSubscription: (endpoint: string) =>
+        apiFetch<{ ok: boolean }>('/push/unsubscribe', {
+            method: 'DELETE',
+            body: JSON.stringify({ endpoint }),
+        }),
+
+    testPush: () => apiFetch<{ ok: boolean; sent: number }>('/push/test', { method: 'POST' }),
+
+    getNotifications: () => apiFetch<WatchNotification[]>('/notifications'),
+
+    // Presets
+    getPresets: () => apiFetch<{ id: string; label: string; description: string; count: number }[]>('/companies/presets'),
+
+    bulkImportPreset: (preset_id: string) =>
+        apiFetch<{ ok: boolean; added: number; skipped: number; total: number }>('/companies/bulk', {
+            method: 'POST',
+            body: JSON.stringify({ preset_id }),
         }),
 };

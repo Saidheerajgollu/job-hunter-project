@@ -8,15 +8,35 @@ import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpe
 
 // Companies known to use Greenhouse job boards (expand this list!)
 const GREENHOUSE_COMPANIES = [
-    // AI / ML
+    // AI / ML / Research
     'openai', 'anthropic', 'cohere', 'scale', 'huggingface', 'stability',
-    'adept', 'inflection', 'perplexity', 'mistral', 'together',
-    // Big Tech
+    'adept', 'inflection', 'perplexity', 'together', 'character',
+    'imbue', 'contextual', 'arcee',
+    // Big Tech / Platform
     'stripe', 'figma', 'notion', 'airtable', 'dropbox', 'asana', 'zendesk',
-    // Data / Cloud
+    'shopify', 'pinterest', 'reddit', 'discord', 'twitch',
+    // Data / Cloud / Infra
     'databricks', 'snowflake', 'dbt', 'fivetran', 'airbyte',
-    // SWE
+    'confluent', 'gitlab', 'digitalocean', 'fastly', 'pagerduty',
+    'okta', 'elastic', 'elastic-co',
+    // SWE / Fintech
     'airbnb', 'lyft', 'doordash', 'robinhood', 'brex', 'plaid', 'gusto',
+    'coinbase', 'chime', 'affirm', 'carta', 'ramp',
+    // Startup / B2B
+    'cloudflare', 'datadog', 'mongodb', 'twilio', 'hashicorp', 'palantir',
+    'benchling', 'lattice', 'rippling', 'deel', 'remote',
+    'sourcegraph', 'posthog', 'retool', 'vercel', 'coda',
+    // Quant / Finance
+    'jane-street', 'tower-research', 'hudson-river-trading',
+    // Seattle / Bellevue OPT-friendly (from verified H-1B sponsors list)
+    'expedia', 'rei', 'zendesk', 'docusign', 'smartsheet', 'avalara',
+    'watchguard', 'f5', 'nintex', 'allenai', 'vastdata', 'sparkcognition',
+    'adaptivebiotech', 'qumulo', 'remitly', 'redfin', 'zillow', 'rover',
+    'chewy', 'offerup', 'convoy', 'shippo', 'flexe', 'vacasa', 'porch',
+    'accolade', 'limeade', 'fredhutch', 'sana', 'apixio',
+    'outreach', 'highspot', 'icertis', 'auth0', 'wpengine', 'hiya',
+    'formant', 'outrider', 'saildrone', 'helion', 'jobber', 'boundless',
+    'pushpay', 'wellsky', 'medbridge', 'gravity',
 ];
 
 const NEW_GRAD_KEYWORDS = [
@@ -32,10 +52,11 @@ function isNewGradRole(title, metadata = '') {
 
 // classifyCategory imported from helpers
 
-export async function scrapeGreenhouse(filterSenior = true) {
+export async function scrapeGreenhouse(filterSenior = true, extraCompanies = []) {
     const jobs = [];
+    const allCompanies = [...new Set([...GREENHOUSE_COMPANIES, ...extraCompanies])];
 
-    for (const company of GREENHOUSE_COMPANIES) {
+    for (const company of allCompanies) {
         try {
             const url = `https://boards-api.greenhouse.io/v1/boards/${company}/jobs?content=true`;
             const resp = await fetch(url, {
