@@ -18,9 +18,9 @@ import { classifyCategory, makeJobId } from './utils/helpers.js';
 import { detectATS } from './utils/atsDetector.js';
 import { DEFAULT_WATCH_ROLES_JSON } from './utils/roleFilters.js';
 import { initPush, getVapidPublicKey, sendPushToAll } from './utils/pushNotifications.js';
-import { SEATTLE_PRESET } from './data/seattleCompanies.js';
-import { NYC_PRESET } from './data/nycCompanies.js';
-import { BAY_AREA_PRESET } from './data/bayAreaCompanies.js';
+import { SEATTLE_PRESET } from './presets/seattleCompanies.js';
+import { NYC_PRESET } from './presets/nycCompanies.js';
+import { BAY_AREA_PRESET } from './presets/bayAreaCompanies.js';
 
 const ALL_PRESETS = [SEATTLE_PRESET, NYC_PRESET, BAY_AREA_PRESET];
 

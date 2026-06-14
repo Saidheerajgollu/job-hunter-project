@@ -127,7 +127,7 @@ backend/
     scrapers/           One module per job source
     watchers/           Company watchlist monitor
     utils/              Filters, ATS detection, context.dev client, push
-    data/               Regional company presets
+    presets/            Regional company presets (Seattle, NYC, Bay Area)
 frontend/
   src/
     app/                Dashboard and settings pages
