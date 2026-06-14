@@ -12,6 +12,7 @@
  */
 
 import { sleep } from './helpers.js';
+import { scrapeMarkdown, isEnabled as contextDevEnabled } from './context.js';
 
 const CAREER_PATH_CANDIDATES = [
     '/careers',
@@ -81,12 +82,12 @@ async function probeLever(slug) {
 
 async function probeAshby(slug) {
     try {
-        const r = await fetch(`https://boards-api.ashbyhq.com/posting-api/job-board/${slug}`, {
+        const r = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${slug}`, {
             signal: AbortSignal.timeout(8000),
         });
         if (!r.ok) return false;
         const d = await r.json();
-        return Array.isArray(d.jobPostings);
+        return Array.isArray(d.jobs) || Array.isArray(d.jobPostings);
     } catch { return false; }
 }
 
@@ -102,35 +103,40 @@ async function detectFromHTML(domain) {
 
     for (const url of urlsToTry) {
         try {
-            const resp = await fetch(url, {
-                redirect: 'follow',
-                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)' },
-                signal: AbortSignal.timeout(10000),
-            });
+            let searchText = '';
+            let finalUrl = url;
 
-            if (!resp.ok && resp.status !== 200) continue;
+            if (contextDevEnabled()) {
+                // context.dev scrape: renders JS and exposes embedded iframes —
+                // catches Greenhouse/Lever embeds that only appear after JS mounts.
+                const { markdown } = await scrapeMarkdown(url, {
+                    waitForMs: 2000,
+                    includeFrames: true,
+                    timeoutMs: 30000,
+                });
+                searchText = url + '\n' + markdown;
+            } else {
+                // Raw fetch fallback — misses JS-rendered content.
+                const resp = await fetch(url, {
+                    redirect: 'follow',
+                    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)' },
+                    signal: AbortSignal.timeout(10000),
+                });
+                if (!resp.ok) continue;
+                finalUrl = resp.url;
+                searchText = finalUrl + '\n' + await resp.text();
+            }
 
-            const finalUrl = resp.url;
-            const html = await resp.text();
-            const searchText = finalUrl + '\n' + html;
-
-            // Check if the final URL itself IS an ATS URL
             for (const { type, regex } of ATS_HTML_PATTERNS) {
                 const match = searchText.match(regex);
                 if (match) {
-                    return {
-                        ats_type: type,
-                        ats_slug: match[1] || null,
-                        career_url: finalUrl,
-                    };
+                    return { ats_type: type, ats_slug: match[1] || null, career_url: finalUrl };
                 }
             }
 
-            // Found a career page but no recognizable ATS
-            if (resp.ok) {
-                return { ats_type: 'custom', ats_slug: null, career_url: finalUrl };
-            }
-        } catch { /* try next */ }
+            // Found a career page but no recognizable ATS signature.
+            return { ats_type: 'custom', ats_slug: null, career_url: finalUrl };
+        } catch { /* try next URL */ }
     }
 
     return { ats_type: 'unknown', ats_slug: null, career_url: null };

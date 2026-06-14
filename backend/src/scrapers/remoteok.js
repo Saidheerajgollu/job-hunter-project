@@ -7,12 +7,6 @@
 
 import { makeJobId, isSeniorRole, classifyCategory } from '../utils/helpers.js';
 
-const NEW_GRAD_KEYWORDS = [
-    'new grad', 'new graduate', 'entry level', 'entry-level',
-    'junior', '2025', '2026', 'early career', 'associate engineer',
-    'university', 'campus',
-];
-
 const TECH_TAGS = [
     'engineer', 'developer', 'software', 'data', 'machine learning', 'ai',
     'backend', 'frontend', 'fullstack', 'full stack', 'python', 'javascript',
@@ -23,11 +17,6 @@ const TECH_TAGS = [
 function isTechRole(title = '', tags = []) {
     const text = (title + ' ' + tags.join(' ')).toLowerCase();
     return TECH_TAGS.some(t => text.includes(t));
-}
-
-function isNewGrad(title = '', tags = []) {
-    const text = (title + ' ' + tags.join(' ')).toLowerCase();
-    return NEW_GRAD_KEYWORDS.some(kw => text.includes(kw));
 }
 
 function parseSalary(job) {
@@ -64,13 +53,15 @@ export async function scrapeRemoteOK(filterSenior = true) {
             const tags = job.tags || [];
 
             if (!isTechRole(title, tags)) continue;
-            if (!isNewGrad(title, tags)) continue;
             if (filterSenior && isSeniorRole(title)) continue;
 
             const jobUrl = job.url || `https://remoteok.com/remote-jobs/${job.id}`;
             const description = job.description
                 ? job.description.replace(/<[^>]*>/g, '').slice(0, 500)
                 : null;
+
+            const category = classifyCategory(title, description || '');
+            if (!category) continue;
 
             jobs.push({
                 id: makeJobId(jobUrl),
@@ -79,14 +70,14 @@ export async function scrapeRemoteOK(filterSenior = true) {
                 location: 'Remote',
                 url: jobUrl,
                 source: 'remoteok',
-                category: classifyCategory(title, description || ''),
+                category,
                 salary: parseSalary(job),
                 description,
                 posted_at: job.date ? new Date(job.date).toISOString() : new Date().toISOString(),
             });
         }
 
-        console.log(`✅ RemoteOK: ${jobs.length} new grad tech jobs found`);
+        console.log(`✅ RemoteOK: ${jobs.length} tech jobs found`);
     } catch (err) {
         console.error(`❌ RemoteOK: ${err.message}`);
     }

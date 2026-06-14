@@ -1,106 +1,131 @@
 /**
  * Workday Job Board Scraper
- * Many large companies (Google, Meta, Apple, Amazon, Microsoft, etc.) use Workday.
- * Workday exposes a REST API endpoint for job searches.
+ *
+ * Uses each company's public Workday CXS (Career Experience Suite) API —
+ * the same JSON endpoint their own career site frontend calls, so no auth
+ * is needed for public listings.
+ *
+ * Each company has a unique subdomain + wd-server + site name.
+ * careerUrl is the canonical public career page; the CXS endpoint is derived
+ * from it by parseWorkdayUrl() (same function used by companyWatcher).
  */
 
-import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
+import { makeJobId, isSeniorRole, sleep, classifyCategory, TECH_SEARCH_TERMS } from '../utils/helpers.js';
+import { parseWorkdayUrl } from '../watchers/atsFetchers.js';
 
-// Companies using Workday with their tenant IDs
-const WORKDAY_TENANTS = [
-    { company: 'Google', tenant: 'google', url: 'https://www.google.com/about/careers/applications/jobs/results/' },
-    { company: 'Meta', tenant: 'meta', subdomain: 'fbcareers' },
-    { company: 'Apple', tenant: 'apple', subdomain: 'apple-careers' },
-    { company: 'Microsoft', tenant: 'microsoft', subdomain: 'microsoft' },
-    { company: 'Amazon', tenant: 'amazon', subdomain: 'amazon' },
-    { company: 'Salesforce', tenant: 'salesforce', subdomain: 'salesforce' },
-    { company: 'Adobe', tenant: 'adobe', subdomain: 'adobe' },
-    { company: 'Intel', tenant: 'intel', subdomain: 'intel' },
-    { company: 'Qualcomm', tenant: 'qualcomm', subdomain: 'qualcomm' },
-    { company: 'Nvidia', tenant: 'nvidia', subdomain: 'nvidia' },
-    { company: 'AMD', tenant: 'amd', subdomain: 'amd' },
-    { company: 'Uber', tenant: 'uber', subdomain: 'uber' },
-    { company: 'Lyft', tenant: 'lyft', subdomain: 'lyft' },
-    { company: 'Twitter/X', tenant: 'twitter', subdomain: 'twitter' },
-    { company: 'Oracle', tenant: 'oracle', subdomain: 'oracle' },
-    { company: 'ServiceNow', tenant: 'servicenow', subdomain: 'servicenow' },
-    { company: 'Workday', tenant: 'workday', subdomain: 'workday' },
-    { company: 'Intuit', tenant: 'intuit', subdomain: 'intuit' },
-    { company: 'Cisco', tenant: 'cisco', subdomain: 'cisco' },
-    { company: 'VMware', tenant: 'vmware', subdomain: 'vmware' },
+// Each entry: { company, careerUrl }
+// careerUrl must match: https://{tenant}.wd{N}.myworkdayjobs.com/{site}[/...]
+const WORKDAY_COMPANIES = [
+    // Cloud / SaaS
+    { company: 'Salesforce',   careerUrl: 'https://salesforce.wd12.myworkdayjobs.com/External' },
+    { company: 'ServiceNow',   careerUrl: 'https://servicenow.wd5.myworkdayjobs.com/External' },
+    { company: 'Workday',      careerUrl: 'https://workday.wd5.myworkdayjobs.com/Workday' },
+    { company: 'Intuit',       careerUrl: 'https://intuit.wd1.myworkdayjobs.com/External' },
+    // Semiconductor / Hardware
+    { company: 'Nvidia',       careerUrl: 'https://nvidia.wd5.myworkdayjobs.com/NvidiaExternalCareerSite' },
+    { company: 'Intel',        careerUrl: 'https://intel.wd1.myworkdayjobs.com/External' },
+    { company: 'Qualcomm',     careerUrl: 'https://qualcomm.wd5.myworkdayjobs.com/External' },
+    { company: 'AMD',          careerUrl: 'https://amd.wd1.myworkdayjobs.com/External' },
+    // Networking / Security
+    { company: 'Cisco',        careerUrl: 'https://cisco.wd5.myworkdayjobs.com/External' },
+    { company: 'VMware',       careerUrl: 'https://vmware.wd1.myworkdayjobs.com/Careers' },
+    // Creative / Enterprise
+    { company: 'Adobe',        careerUrl: 'https://adobe.wd5.myworkdayjobs.com/external_experienced' },
+    // Media / Streaming
+    { company: 'Netflix',      careerUrl: 'https://netflix.wd5.myworkdayjobs.com/Netflix_External_Site' },
+    // Samsung Electronics America (US division)
+    { company: 'Samsung (US)', careerUrl: 'https://sec.wd3.myworkdayjobs.com/Samsung_Careers' },
+    // Autodesk
+    { company: 'Autodesk',     careerUrl: 'https://autodesk.wd1.myworkdayjobs.com/Ext' },
+    // Illumina (biotech / data science roles)
+    { company: 'Illumina',     careerUrl: 'https://illumina.wd1.myworkdayjobs.com/illumina-careers' },
+    // HP Inc
+    { company: 'HP',           careerUrl: 'https://hp.wd5.myworkdayjobs.com/ExternalCareerSite' },
 ];
 
-const NEW_GRAD_SEARCH_TERMS = ['new grad', 'university grad', 'campus hire', '2026', 'early career'];
-// classifyCategory imported from helpers
+async function fetchWorkdayJobs(company, careerUrl) {
+    const wd = parseWorkdayUrl(careerUrl);
+    if (!wd) {
+        console.warn(`⚠️  Workday [${company}]: could not parse career URL: ${careerUrl}`);
+        return [];
+    }
 
-async function fetchWorkdayJobs(tenant) {
-    const apiUrl = `https://${tenant.subdomain}.wd1.myworkdayjobs.com/wday/cxs/${tenant.subdomain}/${tenant.subdomain}_Careers/jobs`;
+    const endpoint = `https://${wd.host}/wday/cxs/${wd.tenant}/${wd.site}/jobs`;
+    const allJobs = [];
 
-    const body = {
-        appliedFacets: {},
-        limit: 20,
-        offset: 0,
-        searchText: 'new grad 2026',
-    };
+    for (const term of TECH_SEARCH_TERMS) {
+        try {
+            const resp = await fetch(endpoint, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)',
+                },
+                body: JSON.stringify({ appliedFacets: {}, limit: 50, offset: 0, searchText: term }),
+                signal: AbortSignal.timeout(15000),
+            });
 
-    const resp = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)',
-            'Accept': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(15000),
+            if (!resp.ok) break; // stop trying terms if the endpoint itself is broken
+
+            const data = await resp.json();
+            for (const posting of (data.jobPostings || [])) {
+                if (posting.externalPath) allJobs.push(posting);
+            }
+
+            await sleep(200);
+        } catch {
+            break;
+        }
+    }
+
+    // Deduplicate by externalPath
+    const seen = new Set();
+    return allJobs.filter(j => {
+        if (seen.has(j.externalPath)) return false;
+        seen.add(j.externalPath);
+        return true;
     });
-
-    if (!resp.ok) return [];
-    const data = await resp.json();
-    return data.jobPostings || [];
 }
 
 export async function scrapeWorkday(filterSenior = true) {
     const jobs = [];
 
-    for (const tenant of WORKDAY_TENANTS) {
-        if (!tenant.subdomain) continue;
+    for (const { company, careerUrl } of WORKDAY_COMPANIES) {
         try {
-            const postings = await fetchWorkdayJobs(tenant);
+            const wd = parseWorkdayUrl(careerUrl);
+            if (!wd) continue;
+
+            const postings = await fetchWorkdayJobs(company, careerUrl);
 
             for (const posting of postings) {
                 const title = posting.title || '';
                 if (filterSenior && isSeniorRole(title)) continue;
 
-                const jobUrl = posting.externalPath
-                    ? `https://${tenant.subdomain}.wd1.myworkdayjobs.com${posting.externalPath}`
-                    : null;
-                if (!jobUrl) continue;
-
-                const location = posting.locationsText || 'US';
-                const postedAt = posting.postedOn
-                    ? new Date(posting.postedOn).toISOString()
-                    : new Date().toISOString();
+                const jobUrl = `https://${wd.host}${posting.externalPath}`;
+                const category = classifyCategory(title);
+                if (!category) continue;
 
                 jobs.push({
                     id: makeJobId(jobUrl),
                     title,
-                    company: tenant.company,
-                    location,
+                    company,
+                    location: posting.locationsText || 'United States',
                     url: jobUrl,
                     source: 'workday',
-                    category: classifyCategory(title),
+                    category,
                     salary: null,
                     description: null,
-                    posted_at: postedAt,
+                    posted_at: new Date().toISOString(),
                 });
             }
 
             if (postings.length > 0) {
-                console.log(`✅ Workday [${tenant.company}]: ${postings.length} postings found`);
+                console.log(`✅ Workday [${company}]: ${postings.length} postings`);
             }
-            await sleep(500);
+            await sleep(600);
         } catch (err) {
-            console.error(`❌ Workday [${tenant.company}]: ${err.message}`);
+            console.error(`❌ Workday [${company}]: ${err.message}`);
         }
     }
 

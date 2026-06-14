@@ -1,7 +1,7 @@
 /**
  * Adzuna Job Search API Scraper
  * Free tier: 1,000 API calls/month — more than enough at 6 scrapes/day.
- * Covers millions of jobs from thousands of sources in US, UK, CA, AU and more.
+ * Covers millions of jobs from thousands of sources in the US.
  *
  * Sign up (free): https://developer.adzuna.com/
  * Set env vars: ADZUNA_APP_ID and ADZUNA_APP_KEY
@@ -11,27 +11,27 @@ import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpe
 
 const ADZUNA_BASE = 'https://api.adzuna.com/v1/api/jobs';
 
-// Search queries per category — tuned for new grads
+// Search queries per category — tech roles (not new-grad specific)
 const QUERIES = {
     ai: [
-        'new grad machine learning engineer',
-        'entry level AI engineer 2026',
-        'junior NLP engineer new graduate',
+        'machine learning engineer',
+        'AI engineer',
+        'NLP engineer',
     ],
     swe: [
-        'new grad software engineer 2026',
-        'entry level software engineer new graduate',
-        'junior developer new grad 2026',
+        'software engineer',
+        'software developer',
+        'full stack engineer',
     ],
     data: [
-        'new grad data scientist 2026',
-        'entry level data engineer new graduate',
-        'junior analytics engineer new grad',
+        'data scientist',
+        'data engineer',
+        'data analyst',
     ],
 };
 
 // Countries to search — add more as needed
-const COUNTRIES = ['us'];  // 'gb', 'ca', 'au' also available on free tier
+const COUNTRIES = ['us'];
 
 async function searchAdzuna(appId, appKey, country, query, category) {
     const params = new URLSearchParams({

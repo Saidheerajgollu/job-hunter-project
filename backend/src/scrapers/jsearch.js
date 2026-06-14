@@ -17,10 +17,13 @@ const RAPIDAPI_HOST = 'jsearch.p.rapidapi.com';
 // 4 queries × 2 pages (num_b_pages) each = 4 API calls per run.
 // 4 calls × 2 runs/day × 30 days = 240 calls/month (well within 500 free tier).
 const SEARCH_QUERIES = [
-    'new grad software engineer 2026',
-    'entry level software engineer new graduate',
-    'new grad machine learning data engineer 2026',
-    'software engineer associate new graduate 2025 2026',
+    'software engineer United States',
+    'machine learning engineer United States',
+    'data scientist United States',
+    'data engineer United States',
+    'frontend engineer United States',
+    'devops engineer United States',
+    'AI engineer United States',
 ];
 
 async function searchJSearch(apiKey, query) {
@@ -48,17 +51,6 @@ async function searchJSearch(apiKey, query) {
     return data.data || [];
 }
 
-const NEW_GRAD_KEYWORDS = [
-    'new grad', 'new graduate', 'entry level', 'entry-level',
-    'junior', '0-2', '2025', '2026', 'associate', 'early career',
-    'university', 'campus', 'sde i', 'swe i', 'level 1', 'level i',
-];
-
-function isNewGradRole(title, desc = '') {
-    const text = (title + ' ' + desc.slice(0, 300)).toLowerCase();
-    return NEW_GRAD_KEYWORDS.some(kw => text.includes(kw));
-}
-
 export async function scrapeJSearch(filterSenior = true) {
     const apiKey = process.env.RAPIDAPI_KEY;
     if (!apiKey || apiKey === 'your_rapidapi_key_here') {
@@ -79,7 +71,9 @@ export async function scrapeJSearch(filterSenior = true) {
                 seen.add(jobId);
 
                 const title = item.job_title || '';
-                if (!isNewGradRole(title, item.job_description || '')) continue;
+                const description = (item.job_description || '').slice(0, 500);
+                const category = classifyCategory(title, description);
+                if (!category) continue;
                 if (filterSenior && isSeniorRole(title)) continue;
 
                 const applyUrl = item.job_apply_link || item.job_google_link;
@@ -106,7 +100,7 @@ export async function scrapeJSearch(filterSenior = true) {
                     location,
                     url: applyUrl,
                     source: 'jsearch',
-                    category: classifyCategory(title, (item.job_description || '').slice(0, 500)),
+                    category,
                     salary,
                     description: item.job_description ? item.job_description.slice(0, 500) : null,
                     posted_at: postedAt,

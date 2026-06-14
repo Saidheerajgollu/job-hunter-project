@@ -6,15 +6,11 @@ import { WatchlistPanel, NotificationBell } from '@/components/WatchlistPanel';
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
-// SQLite stores UTC datetimes without 'Z' (e.g. "2026-03-19 21:43:01").
-// JS parses those as local time, making them hours off. Fix by normalizing to UTC.
 function toUTC(dateStr: string): Date {
     if (!dateStr) return new Date(NaN);
-    // Already has timezone info — parse as-is
     if (dateStr.includes('Z') || dateStr.includes('+') || dateStr.includes('-', 10)) {
         return new Date(dateStr);
     }
-    // SQLite format: "YYYY-MM-DD HH:MM:SS" → treat as UTC
     return new Date(dateStr.replace(' ', 'T') + 'Z');
 }
 
@@ -37,14 +33,33 @@ function formatDate(dateStr: string) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+function appliedDaysInfo(appliedAt: string | null): { label: string; cls: string } | null {
+    if (!appliedAt) return null;
+    const days = Math.floor((Date.now() - toUTC(appliedAt).getTime()) / 86400000);
+    if (days === 0) return { label: 'Applied today', cls: 'fresh' };
+    if (days <= 3) return { label: `Applied ${days}d ago`, cls: 'fresh' };
+    if (days <= 7) return { label: `Applied ${days}d ago — follow up?`, cls: 'warning' };
+    return { label: `Applied ${days}d ago — overdue follow-up`, cls: 'overdue' };
+}
+
 function getCompanyInitials(company: string) {
     return company.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 }
 
-const COLORS = ['4c6ef5', '20c997', 'fd7e14', 'fa5252', '9b59b6', 'f59f00', '0ca678', 'e64980'];
+const COLORS = ['1B4965', '2D6A4F', 'BC6C25', 'C41E3A', '4A4740', '7A756C'];
 function getCompanyColor(company: string) {
     const hash = company.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
     return COLORS[hash % COLORS.length];
+}
+
+function formatSource(source: string) {
+    const labels: Record<string, string> = {
+        greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', workday: 'Workday',
+        simplifyjobs: 'SimplifyJobs', jsearch: 'JSearch', fantasticjobs: 'Fantastic.jobs',
+        remoteok: 'RemoteOK', remotive: 'Remotive', adzuna: 'Adzuna', direct: 'Direct',
+        himalayas: 'Himalayas', weworkremotely: 'WWR',
+    };
+    return labels[source] || source;
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -116,6 +131,15 @@ const CATEGORIES = [
     { value: 'devops', label: 'DevOps / Cloud' },
 ];
 
+const EXPERIENCE_LEVELS = [
+    { value: '', label: 'Any exp' },
+    { value: '1', label: '1 yr' },
+    { value: '2', label: '2 yr' },
+    { value: '3', label: '3 yr' },
+    { value: '4', label: '4 yr' },
+    { value: '5', label: '5+ yr' },
+];
+
 const SOURCES = [
     { value: '', label: 'All sources' },
     { value: 'greenhouse', label: 'Greenhouse' },
@@ -124,12 +148,12 @@ const SOURCES = [
     { value: 'workday', label: 'Workday' },
     { value: 'simplifyjobs', label: 'SimplifyJobs' },
     { value: 'jsearch', label: 'JSearch' },
-    { value: 'fantasticjobs', label: 'Fantastic.jobs' },
     { value: 'remoteok', label: 'RemoteOK' },
     { value: 'remotive', label: 'Remotive' },
     { value: 'adzuna', label: 'Adzuna' },
+    { value: 'himalayas', label: 'Himalayas' },
+    { value: 'weworkremotely', label: 'WWR' },
 ];
-
 
 function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
     const [search, setSearch] = useState(filters.search || '');
@@ -139,6 +163,22 @@ function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
         setSearch(val);
         clearTimeout(timerRef.current);
         timerRef.current = setTimeout(() => onChange({ search: val, page: 1 }), 400);
+    }
+
+    function toggleAge(ageKey: 'fresh_only' | 'max_age_days', val: string) {
+        const isActive =
+            ageKey === 'fresh_only' ? filters.fresh_only === '1'
+            : filters.max_age_days === val;
+
+        if (isActive) {
+            onChange({ fresh_only: '', max_age_days: '', page: 1 });
+        } else {
+            onChange({
+                fresh_only: ageKey === 'fresh_only' ? '1' : '',
+                max_age_days: ageKey === 'max_age_days' ? val : '',
+                page: 1,
+            });
+        }
     }
 
     return (
@@ -171,25 +211,71 @@ function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
                     {scraping ? 'Syncing…' : 'Sync now'}
                 </button>
             </div>
+
+            {/* Role filter row — matches title keywords (e.g. "Senior Software Engineer") */}
             <div className="filter-row">
                 <span className="filter-chips-label">Role</span>
                 <div className="filter-chips">
-                    <button
-                        className={`chip chip-fresh ${filters.fresh_only === '1' ? 'active' : ''}`}
-                        onClick={() => onChange({ fresh_only: filters.fresh_only === '1' ? '' : '1', page: 1 })}
-                        title="Jobs found in the last 24 hours"
-                    >
-                        Today
-                    </button>
                     {CATEGORIES.map(c => (
                         <button
                             key={c.value}
                             className={`chip ${filters.category === c.value ? 'active' : ''}`}
-                            onClick={() => onChange({ category: c.value, page: 1 })}
+                            onClick={() => onChange({ category: c.value, role: c.value, page: 1 })}
                         >
                             {c.label}
                         </button>
                     ))}
+                </div>
+            </div>
+
+            {/* Experience filter row */}
+            <div className="filter-row">
+                <span className="filter-chips-label">Exp</span>
+                <div className="filter-chips">
+                    {EXPERIENCE_LEVELS.map(e => (
+                        <button
+                            key={e.value || 'any'}
+                            className={`chip ${(filters.experience || '') === e.value ? 'active' : ''}`}
+                            onClick={() => onChange({ experience: e.value, page: 1 })}
+                        >
+                            {e.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Time + extras row */}
+            <div className="filter-row">
+                <span className="filter-chips-label">Filter</span>
+                <div className="filter-chips">
+                    <button
+                        className={`chip chip-fresh ${filters.fresh_only === '1' ? 'active' : ''}`}
+                        onClick={() => toggleAge('fresh_only', '1')}
+                        title="Jobs scraped in the last 24 hours"
+                    >
+                        Today
+                    </button>
+                    <button
+                        className={`chip chip-week ${filters.max_age_days === '7' ? 'active' : ''}`}
+                        onClick={() => toggleAge('max_age_days', '7')}
+                        title="Jobs scraped in the last 7 days"
+                    >
+                        This week
+                    </button>
+                    <button
+                        className={`chip chip-month ${filters.max_age_days === '30' ? 'active' : ''}`}
+                        onClick={() => toggleAge('max_age_days', '30')}
+                        title="Jobs scraped in the last 30 days"
+                    >
+                        This month
+                    </button>
+                    <button
+                        className={`chip chip-salary ${filters.has_salary === '1' ? 'active' : ''}`}
+                        onClick={() => onChange({ has_salary: filters.has_salary === '1' ? '' : '1', page: 1 })}
+                        title="Only show jobs with salary info"
+                    >
+                        Has salary
+                    </button>
                 </div>
             </div>
         </div>
@@ -201,102 +287,206 @@ function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
 function JobCard({
     job,
     onStatusChange,
+    onNotesChange,
 }: {
     job: Job;
     onStatusChange: (id: string, status: string) => void;
+    onNotesChange: (id: string, notes: string) => void;
 }) {
     const initials = getCompanyInitials(job.company);
     const color = getCompanyColor(job.company);
+    const [expanded, setExpanded] = useState(false);
+    const [descExpanded, setDescExpanded] = useState(false);
+    const [localNotes, setLocalNotes] = useState(job.notes || '');
+    const [notesSaved, setNotesSaved] = useState(false);
+    const [notesSaving, setNotesSaving] = useState(false);
+
+    // Keep local notes in sync if job prop changes (e.g. after re-fetch)
+    useEffect(() => {
+        setLocalNotes(job.notes || '');
+    }, [job.notes]);
+
+    async function saveNotes() {
+        if (localNotes === (job.notes || '')) return;
+        setNotesSaving(true);
+        await onNotesChange(job.id, localNotes);
+        setNotesSaving(false);
+        setNotesSaved(true);
+        setTimeout(() => setNotesSaved(false), 2000);
+    }
+
+    const appliedInfo = appliedDaysInfo(job.applied_at);
+    const hasContent = !!(job.description || true); // always show notes option
+
+    const catLabel =
+        job.category === 'ai' ? 'AI Eng' :
+        job.category === 'ml' ? 'ML Eng' :
+        job.category === 'data-science' ? 'Data Sci' :
+        job.category === 'data-engineer' ? 'Data Eng' :
+        job.category === 'data-analyst' ? 'Data Analyst' :
+        job.category === 'fullstack' ? 'Full Stack' :
+        job.category === 'devops' ? 'DevOps' :
+        job.category?.charAt(0).toUpperCase() + job.category?.slice(1);
 
     return (
-        <div className={`job-card status-${job.status}`}>
-            <div className="company-logo" style={{ color: `#${color}` }}>
-                <img
-                    src={`https://logo.clearbit.com/${encodeURIComponent(job.company.toLowerCase().replace(/\s/g, ''))}.com`}
-                    alt={job.company}
-                    onError={e => {
-                        (e.target as HTMLImageElement).style.display = 'none';
-                        (e.target as HTMLImageElement).nextElementSibling!.textContent = initials;
-                    }}
-                />
-                <span style={{ display: 'none' }}>{initials}</span>
-            </div>
+        <div className={`job-card-wrap status-${job.status}`}>
+            <div className="job-card">
+                <div className="company-logo" style={{ color: `#${color}` }}>
+                    <img
+                        src={`https://logo.clearbit.com/${encodeURIComponent(job.company.toLowerCase().replace(/\s/g, ''))}.com`}
+                        alt={job.company}
+                        onError={e => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                            (e.target as HTMLImageElement).nextElementSibling!.textContent = initials;
+                        }}
+                    />
+                    <span style={{ display: 'none' }}>{initials}</span>
+                </div>
 
-            <div className="job-info">
-                <div className="job-title">{job.title}</div>
-                <div className="job-company">{job.company}</div>
-                <div className="job-meta">
-                    {job.location && <span className="job-meta-item">{job.location}</span>}
-                    {job.salary && <span className="job-meta-item">{job.salary}</span>}
-                    <span className="job-meta-item">Posted {formatDate(job.posted_at || job.scraped_at)}</span>
-                    <span className="job-meta-item">Synced {timeAgo(job.scraped_at)}</span>
+                <div className="job-info">
+                    <div className="job-title">{job.title}</div>
+                    <div className="job-company">{job.company}</div>
+                    <div className="job-meta">
+                        {job.location && <span className="job-meta-item">{job.location}</span>}
+                        {job.salary && <span className="job-meta-item">{job.salary}</span>}
+                        {job.is_reposted === 1 ? (
+                            <>
+                                <span className="job-meta-item">
+                                    Portal {formatDate(job.posted_at || job.scraped_at)}
+                                </span>
+                                {job.previous_posted_at && (
+                                    <span className="job-meta-item">
+                                        Was {formatDate(job.previous_posted_at)}
+                                    </span>
+                                )}
+                                {job.reposted_at && (
+                                    <span className="job-meta-item">
+                                        Reposted {formatDate(job.reposted_at)}
+                                    </span>
+                                )}
+                            </>
+                        ) : (
+                            <span className="job-meta-item">
+                                Posted {formatDate(job.posted_at || job.scraped_at)}
+                            </span>
+                        )}
+                        <span className="job-meta-item">Synced {timeAgo(job.scraped_at)}</span>
+                    </div>
+                    {appliedInfo && (
+                        <span className={`applied-date ${appliedInfo.cls}`}>{appliedInfo.label}</span>
+                    )}
+                </div>
+
+                <div className="job-badges">
+                    {job.is_fresh === 1 && <span className="badge badge-fresh">Today</span>}
+                    {job.is_reposted === 1 && <span className="badge badge-reposted">Reposted</span>}
+                    {job.is_new === 1 && <span className="badge badge-new">New</span>}
+                    <span className="badge badge-source">{formatSource(job.source)}</span>
+                    <span className={`badge badge-cat-${job.category}`}>{catLabel}</span>
+                    {job.status === 'applied' && <span className="badge badge-applied">Applied</span>}
+                    {job.status === 'saved' && <span className="badge badge-saved">Saved</span>}
+                </div>
+
+                <div className="job-actions">
+                    {/* External link — does NOT auto-mark applied */}
+                    <a
+                        href={job.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn btn-secondary btn-sm"
+                    >
+                        Apply ↗
+                    </a>
+
+                    {/* Explicit mark-applied button */}
+                    {job.status !== 'applied' && (
+                        <button
+                            className="btn btn-primary btn-sm"
+                            onClick={() => onStatusChange(job.id, 'applied')}
+                            title="Mark this job as applied"
+                        >
+                            Mark Applied
+                        </button>
+                    )}
+
+                    {/* Save (only for new/ignored) */}
+                    {job.status !== 'saved' && job.status !== 'applied' && (
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => onStatusChange(job.id, 'saved')}
+                        >
+                            Save
+                        </button>
+                    )}
+
+                    {/* Undo or Hide */}
+                    {job.status === 'applied' ? (
+                        <button className="btn btn-ghost btn-sm" onClick={() => onStatusChange(job.id, 'new')}>
+                            Undo
+                        </button>
+                    ) : (
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => onStatusChange(job.id, 'ignored')}
+                        >
+                            Hide
+                        </button>
+                    )}
+
+                    {/* Expand toggle for description + notes */}
+                    {hasContent && (
+                        <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setExpanded(e => !e)}
+                            title={expanded ? 'Collapse' : 'Notes / Description'}
+                            style={{ padding: '5px 7px' }}
+                        >
+                            {expanded ? '▲' : '▼'}
+                        </button>
+                    )}
                 </div>
             </div>
 
-            <div className="job-badges">
-                {job.is_fresh === 1 && <span className="badge badge-fresh">Today</span>}
-                {job.is_new === 1 && <span className="badge badge-new">New</span>}
-                <span className="badge badge-source">{formatSource(job.source)}</span>
-                <span className={`badge badge-cat-${job.category}`}>
-                    {job.category === 'ai' ? 'AI Eng' :
-                     job.category === 'ml' ? 'ML Eng' :
-                     job.category === 'data-science' ? 'Data Sci' :
-                     job.category === 'data-engineer' ? 'Data Eng' :
-                     job.category === 'data-analyst' ? 'Data Analyst' :
-                     job.category === 'fullstack' ? 'Full Stack' :
-                     job.category === 'devops' ? 'DevOps' :
-                     job.category?.charAt(0).toUpperCase() + job.category?.slice(1)}
-                </span>
+            {expanded && (
+                <div className="job-expand-panel">
+                    {job.description && (
+                        <div>
+                            <div className={`job-description-text ${descExpanded ? '' : 'collapsed'}`}>
+                                {job.description}
+                            </div>
+                            <button
+                                className="job-desc-toggle"
+                                onClick={() => setDescExpanded(d => !d)}
+                            >
+                                {descExpanded ? 'Show less' : 'Show full description'}
+                            </button>
+                        </div>
+                    )}
 
-                {job.status === 'applied' && <span className="badge badge-applied">Applied</span>}
-                {job.status === 'saved' && <span className="badge badge-saved">Saved</span>}
-            </div>
-
-            <div className="job-actions">
-                <a
-                    href={job.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => {
-                        if (job.status === 'new') onStatusChange(job.id, 'applied');
-                    }}
-                >
-                    Apply
-                </a>
-                {job.status !== 'saved' && job.status !== 'applied' && (
-                    <button
-                        className="btn btn-secondary btn-sm"
-                        onClick={() => onStatusChange(job.id, 'saved')}
-                    >
-                        Save
-                    </button>
-                )}
-                {job.status === 'applied' ? (
-                    <button className="btn btn-ghost btn-sm" onClick={() => onStatusChange(job.id, 'new')}>
-                        Undo
-                    </button>
-                ) : (
-                    <button
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => onStatusChange(job.id, 'ignored')}
-                    >
-                        Hide
-                    </button>
-                )}
-            </div>
+                    <div className="job-notes-section">
+                        <span className="job-notes-label">Notes</span>
+                        <textarea
+                            className="job-notes-textarea"
+                            placeholder="Add notes — resume version, recruiter name, interview stage, follow-up date…"
+                            value={localNotes}
+                            onChange={e => setLocalNotes(e.target.value)}
+                            onBlur={saveNotes}
+                        />
+                        <div className="job-notes-actions">
+                            {notesSaved && <span className="job-notes-saved">Saved</span>}
+                            <button
+                                className="btn btn-ghost btn-sm"
+                                onClick={saveNotes}
+                                disabled={notesSaving || localNotes === (job.notes || '')}
+                            >
+                                {notesSaving ? 'Saving…' : 'Save note'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
-}
-
-function formatSource(source: string) {
-    const labels: Record<string, string> = {
-        greenhouse: 'Greenhouse', lever: 'Lever', ashby: 'Ashby', workday: 'Workday',
-        simplifyjobs: 'SimplifyJobs', jsearch: 'JSearch', fantasticjobs: 'Fantastic.jobs',
-        remoteok: 'RemoteOK', remotive: 'Remotive', adzuna: 'Adzuna', direct: 'Direct',
-        himalayas: 'Himalayas', weworkremotely: 'WWR',
-    };
-    return labels[source] || source;
 }
 
 // ── Applied Tracker Banner ────────────────────────────────────────────────────
@@ -307,18 +497,20 @@ function AppliedBanner({ count }: { count: number }) {
         <div className="applied-banner">
             <div>
                 <strong>{count} application{count !== 1 ? 's' : ''} tracked</strong>
-                <span> — click Apply → on any job to auto-mark it here</span>
+                <span> — click "Mark Applied" on any job to track it here</span>
             </div>
         </div>
     );
 }
 
+// ── Status Tabs ───────────────────────────────────────────────────────────────
+
 const STATUS_TABS = [
-    { value: '', label: 'All' },
-    { value: 'new', label: 'New' },
-    { value: 'saved', label: 'Saved' },
-    { value: 'applied', label: 'Applied' },
-    { value: 'ignored', label: 'Hidden' },
+    { value: '', label: 'All', countKey: 'total' as const },
+    { value: 'new', label: 'New', countKey: 'count_new' as const },
+    { value: 'saved', label: 'Saved', countKey: 'saved' as const },
+    { value: 'applied', label: 'Applied', countKey: 'applied' as const },
+    { value: 'ignored', label: 'Hidden', countKey: 'ignored' as const },
 ];
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
@@ -330,6 +522,7 @@ export default function Home() {
     const [loading, setLoading] = useState(true);
     const [scraping, setScraping] = useState(false);
     const [filters, setFilters] = useState<JobFilters>({ page: 1, limit: 30 });
+    const [gradLabel, setGradLabel] = useState('2026 new grad');
     const { toasts, show: showToast } = useToast();
 
     const fetchJobs = useCallback(async (f: JobFilters) => {
@@ -350,6 +543,13 @@ export default function Home() {
             const s = await api.getStats();
             setStats(s);
         } catch { /* ignore */ }
+    }, []);
+
+    // Fetch grad label from settings (cheap, one-time)
+    useEffect(() => {
+        api.getSettings().then(s => {
+            if (s.grad_label) setGradLabel(s.grad_label);
+        }).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -379,10 +579,23 @@ export default function Home() {
     async function handleStatusChange(id: string, status: string) {
         try {
             await api.updateJobStatus(id, status);
-            setJobs(prev => prev.map(j => j.id === id ? { ...j, status: status as Job['status'], is_new: 0 } : j));
+            setJobs(prev => prev.map(j =>
+                j.id === id
+                    ? { ...j, status: status as Job['status'], is_new: 0, applied_at: status === 'applied' && !j.applied_at ? new Date().toISOString() : j.applied_at }
+                    : j
+            ));
             fetchStats();
         } catch {
             showToast('Failed to update status', 'error');
+        }
+    }
+
+    async function handleNotesChange(id: string, notes: string) {
+        try {
+            await api.updateJobNotes(id, notes || null);
+            setJobs(prev => prev.map(j => j.id === id ? { ...j, notes: notes || null } : j));
+        } catch {
+            showToast('Failed to save notes', 'error');
         }
     }
 
@@ -391,31 +604,32 @@ export default function Home() {
 
     return (
         <div className="app-layout">
-            {/* Navbar */}
             <nav className="navbar">
-                <a href="/" className="navbar-brand">
-                    <span className="navbar-brand-icon" aria-hidden />
-                    Job Hunter
-                </a>
-                <div className="navbar-actions">
-                    <span className="navbar-tag">2026 new grad</span>
-                    <span className="navbar-divider" aria-hidden />
-                    <a href="/settings" className="btn btn-ghost btn-sm">Settings</a>
+                <div className="grid-container navbar-inner">
+                    <a href="/" className="navbar-brand">
+                        <span className="navbar-brand-mark" aria-hidden />
+                        Job Hunter
+                    </a>
+                    <div className="navbar-actions">
+                        <span className="navbar-tag">{gradLabel}</span>
+                        <span className="navbar-divider" aria-hidden />
+                        <a href="/settings" className="btn btn-ghost btn-sm">Settings</a>
+                    </div>
                 </div>
             </nav>
 
-            <main className="main-content">
-                {/* Header */}
+            <main className="main-content grid-container">
                 <div className="page-header">
                     <div>
+                        <p className="page-meta">Modular feed · 11 sources</p>
                         <h1 className="page-title">Jobs</h1>
                         <p className="page-subtitle">
-                            New grad roles in AI, software, and data — synced hourly from 11 sources.
+                            US-located roles — hides US-citizenship-only jobs (sponsorship not required).
                         </p>
                     </div>
                     <div className="page-actions">
                         <NotificationBell />
-                        {stats?.new_count ? (
+                        {(stats?.new_count ?? 0) > 0 && (
                             <button
                                 className="btn btn-ghost btn-sm"
                                 onClick={async () => {
@@ -426,7 +640,7 @@ export default function Home() {
                             >
                                 Mark all seen
                             </button>
-                        ) : null}
+                        )}
                     </div>
                 </div>
 
@@ -436,15 +650,21 @@ export default function Home() {
                 {/* Status Tabs */}
                 <div className="toolbar">
                     <div className="status-tabs">
-                        {STATUS_TABS.map(tab => (
-                            <button
-                                key={tab.value}
-                                className={`status-tab ${(filters.status || '') === tab.value ? 'active' : ''}`}
-                                onClick={() => handleFilterChange({ status: tab.value, page: 1 })}
-                            >
-                                {tab.label}
-                            </button>
-                        ))}
+                        {STATUS_TABS.map(tab => {
+                            const count = stats ? stats[tab.countKey] : null;
+                            return (
+                                <button
+                                    key={tab.value}
+                                    className={`status-tab ${(filters.status || '') === tab.value ? 'active' : ''}`}
+                                    onClick={() => handleFilterChange({ status: tab.value, page: 1 })}
+                                >
+                                    {tab.label}
+                                    {count != null && count > 0 && (
+                                        <span className="tab-count">{count.toLocaleString()}</span>
+                                    )}
+                                </button>
+                            );
+                        })}
                     </div>
                     <span className="result-count">
                         {total.toLocaleString()} result{total !== 1 ? 's' : ''}
@@ -472,11 +692,11 @@ export default function Home() {
                     </div>
                 ) : jobs.length === 0 ? (
                     <div className="empty-state">
-                        <div className="empty-icon">∅</div>
+                        <div className="empty-icon">0</div>
                         <div className="empty-title">No jobs found</div>
                         <div className="empty-desc">
                             {filters.status === 'applied'
-                                ? 'No applications tracked yet. Click Apply on any job to mark it here.'
+                                ? 'No applications tracked yet. Click "Mark Applied" on any job to track it here.'
                                 : Object.keys(filters).filter(k => filters[k as keyof JobFilters]).length > 2
                                 ? 'Try adjusting your filters or sync to fetch the latest listings.'
                                 : 'Run a sync to pull fresh roles from Greenhouse, Lever, Ashby, and more.'}
@@ -488,7 +708,12 @@ export default function Home() {
                 ) : (
                     <div className="jobs-grid">
                         {jobs.map(job => (
-                            <JobCard key={job.id} job={job} onStatusChange={handleStatusChange} />
+                            <JobCard
+                                key={job.id}
+                                job={job}
+                                onStatusChange={handleStatusChange}
+                                onNotesChange={handleNotesChange}
+                            />
                         ))}
                     </div>
                 )}
@@ -525,6 +750,11 @@ export default function Home() {
                         </button>
                     </div>
                 )}
+
+                <footer className="page-footer-rule">
+                    <span>Grid 12 · Baseline 8</span>
+                    <span>{total.toLocaleString()} indexed</span>
+                </footer>
             </main>
 
             {/* Toast notifications */}

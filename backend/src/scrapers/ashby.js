@@ -2,10 +2,12 @@
  * Ashby Job Board Scraper
  * Ashby exposes a public JSON API for each company's job board.
  * No browser needed — pure HTTP fetch.
- * API: https://boards-api.ashbyhq.com/posting-api/job-board/{slug}
+ * API: https://api.ashbyhq.com/posting-api/job-board/{slug}
  */
 
 import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
+
+const ASHBY_API = 'https://api.ashbyhq.com/posting-api/job-board';
 
 const ASHBY_COMPANIES = [
     // AI / ML / Dev Tools
@@ -42,17 +44,6 @@ const ASHBY_COMPANIES = [
     { slug: 'vercel', name: 'Vercel' },
 ];
 
-const NEW_GRAD_KEYWORDS = [
-    'new grad', 'new graduate', 'entry level', 'entry-level',
-    'junior', '0-2', '2025', '2026', 'university', 'campus',
-    'associate', 'early career',
-];
-
-function isNewGrad(title, teamName = '') {
-    const text = (title + ' ' + teamName).toLowerCase();
-    return NEW_GRAD_KEYWORDS.some(kw => text.includes(kw));
-}
-
 export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
     const jobs = [];
     const extraObjs = extraCompanies.map(slug => ({ slug, name: slug }));
@@ -63,7 +54,7 @@ export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
 
     for (const company of allCompanies) {
         try {
-            const url = `https://boards-api.ashbyhq.com/posting-api/job-board/${company.slug}`;
+            const url = `${ASHBY_API}/${company.slug}`;
             const resp = await fetch(url, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)' },
                 signal: AbortSignal.timeout(10000),
@@ -75,16 +66,19 @@ export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
             }
 
             const data = await resp.json();
-            const postings = data.jobPostings || [];
+            const postings = data.jobs || data.jobPostings || [];
+            let companyCount = 0;
 
             for (const posting of postings) {
-                if (!posting.isListed) continue;
+                if (posting.isListed === false) continue;
                 const title = posting.title || '';
-                if (!isNewGrad(title, posting.teamName || '')) continue;
+                const description = posting.descriptionPlain || posting.descriptionHtml || '';
+                const category = classifyCategory(title, description);
+                if (!category) continue;
                 if (filterSenior && isSeniorRole(title)) continue;
 
                 const jobUrl = posting.jobUrl || `https://jobs.ashbyhq.com/${company.slug}/${posting.id}`;
-                const location = posting.locationName || posting.workplaceType || 'Remote/US';
+                const location = posting.location || posting.locationName || posting.workplaceType || 'Remote/US';
                 const postedAt = posting.publishedAt
                     ? new Date(posting.publishedAt).toISOString()
                     : new Date().toISOString();
@@ -96,15 +90,16 @@ export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
                     location,
                     url: jobUrl,
                     source: 'ashby',
-                    category: classifyCategory(title),
-                    salary: null,
-                    description: null,
+                    category,
+                    salary: posting.compensation?.scrapeableCompensationSalarySummary || null,
+                    description: posting.descriptionPlain || null,
                     posted_at: postedAt,
                 });
+                companyCount++;
             }
 
             if (postings.length > 0) {
-                console.log(`✅ Ashby [${company.name}]: ${postings.length} postings checked`);
+                console.log(`✅ Ashby [${company.name}]: ${companyCount} tech roles (${postings.length} total)`);
             }
             await sleep(250);
         } catch (err) {

@@ -33,18 +33,21 @@ export default function SettingsPage() {
     return (
         <div className="app-layout">
             <nav className="navbar">
-                <a href="/" className="navbar-brand">
-                    <span className="navbar-brand-icon" aria-hidden />
-                    Job Hunter
-                </a>
-                <div className="navbar-actions">
-                    <a href="/" className="btn btn-ghost btn-sm">Back to jobs</a>
+                <div className="grid-container navbar-inner">
+                    <a href="/" className="navbar-brand">
+                        <span className="navbar-brand-mark" aria-hidden />
+                        Job Hunter
+                    </a>
+                    <div className="navbar-actions">
+                        <a href="/" className="btn btn-ghost btn-sm">← Jobs</a>
+                    </div>
                 </div>
             </nav>
 
-            <main className="main-content">
+            <main className="main-content grid-container">
                 <div className="page-header">
                     <div>
+                        <p className="page-meta">Configuration</p>
                         <h1 className="page-title">Settings</h1>
                         <p className="page-subtitle">Keywords, filters, and scrape preferences.</p>
                     </div>
@@ -60,6 +63,24 @@ export default function SettingsPage() {
                     </div>
                 ) : (
                     <div className="settings-container">
+                        <div className="settings-section">
+                            <div className="settings-section-title">Display</div>
+
+                            <div className="settings-field">
+                                <label className="settings-label">Navbar label</label>
+                                <input
+                                    type="text"
+                                    className="settings-input"
+                                    value={settings.grad_label || ''}
+                                    onChange={e => update('grad_label', e.target.value)}
+                                    placeholder="2026 new grad"
+                                />
+                                <p className="settings-help">
+                                    Shown in the top-right of the navbar. Update this after graduation (e.g. &quot;New grad SWE&quot; or &quot;1 YOE&quot;).
+                                </p>
+                            </div>
+                        </div>
+
                         <div className="settings-section">
                             <div className="settings-section-title">Search keywords</div>
 

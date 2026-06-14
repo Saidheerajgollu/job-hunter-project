@@ -107,9 +107,11 @@ export function classifyCategory(title, description = '') {
     if (/\b(network engineer|security engineer|cybersecurity engineer|information security engineer)\b/.test(t)) return 'devops';
     if (/\b(kubernetes engineer|cloud architect|systems reliability|build engineer)\b/.test(t)) return 'devops';
 
-    // ── Frontend Engineer ─────────────────────────────────────────────────────────
+    // ── Frontend / UI-UX ───────────────────────────────────────────────────────────
     if (/\b(front[\s\-]?end engineer|front[\s\-]?end developer|frontend engineer|frontend developer)\b/.test(t)) return 'frontend';
     if (/\b(ui engineer|ui developer|ux engineer|web developer|web engineer)\b/.test(t)) return 'frontend';
+    if (/\b(ui\/ux|ux\/ui)\b/.test(t) && /\b(designer|engineer|developer|design)\b/.test(t)) return 'frontend';
+    if (/\b(ux designer|ui designer|product designer|visual designer|interaction designer)\b/.test(t)) return 'frontend';
     if (/\b(react (engineer|developer)|vue (engineer|developer)|angular (engineer|developer)|svelte (engineer|developer))\b/.test(t)) return 'frontend';
     if (/\b(javascript engineer|typescript engineer|next\.?js engineer|nuxt engineer)\b/.test(t)) return 'frontend';
     if (/\b(ios engineer|ios developer|android engineer|android developer|mobile engineer|mobile developer|flutter engineer|react native engineer)\b/.test(t)) return 'frontend';
@@ -148,29 +150,97 @@ export function classifyCategory(title, description = '') {
 
 /**
  * Returns true if the location string is US-compatible.
- * Accepts: US cities/states, "Remote", "Worldwide", "Anywhere", blank.
- * Rejects: Europe, UK, Asia, Canada-only, etc.
+ * US **location** only — does not require US citizenship (F-1 / OPT friendly).
+ * Accepts: US cities/states, "Remote", blank, "United States".
+ * Rejects: UK, Europe, Canada-only, etc.
  */
 export function isUSCompatible(location = '') {
-    if (!location) return true; // no restriction = worldwide = fine
+    if (!location) return true;
 
     const loc = location.toLowerCase().trim();
 
-    // Explicit non-US regions — reject these
+    // Explicit US signals — always accept
+    if (/\b(united states|u\.s\.a?\.?|usa)\b/.test(loc)) return true;
+    if (/\b(remote.*\b(us|usa|united states)\b|\b(us|usa|united states)\b.*remote)\b/.test(loc)) return true;
+
+    // UK — explicit patterns first
+    if (/\b(united kingdom|u\.k\.|great britain)\b/.test(loc)) return false;
+    if (/\bremote in uk\b/.test(loc)) return false;
+    if (/(^|[|,])\s*uk\s*($|[|,])/.test(loc)) return false;
+    if (/\b(london|manchester|edinburgh|glasgow|bristol|leeds|cardiff|birmingham|newcastle upon tyne|slough|cambridge),?\s*uk\b/.test(loc)) return false;
+    if (/\buk only\b/.test(loc)) return false;
+
+    // International cities that often slip through without country suffix
+    if (/\b(warsaw|berlin|munich|frankfurt|hamburg|krakow|kraków|paris|amsterdam|zurich|stockholm|tokyo|beijing|shanghai|hyderabad|bangalore|bengaluru|seoul|taipei)\b/.test(loc)) return false;
+    if (/\blondon\b/.test(loc) && !/\b(london,?\s*(ky|oh|on\b)|united states|, us\b| usa\b)/.test(loc)) return false;
+
     const nonUS = [
-        'europe', 'european', 'eu only', 'eu-only',
-        'united kingdom', 'uk only', 'uk-only', ' uk ',
-        'canada only', 'canada-only',
-        'australia', 'new zealand',
+        'europe', 'european', 'eu only', 'eu-only', ' emea',
+        'cambridgeshire',
+        'canada only', 'canada-only', ', canada', ' toronto,', 'vancouver,', 'montreal,',
+        'australia', 'new zealand', 'sydney,', 'melbourne,',
         'asia', 'apac', 'india only', 'india-only',
         'latin america', 'latam',
         'germany', 'france', 'netherlands', 'spain', 'portugal',
-        'brazil', 'mexico',
-        'africa', 'middle east',
+        'ireland', 'dublin,',
+        'brazil', 'mexico city',
+        'africa', 'middle east', 'singapore',
     ];
     if (nonUS.some(r => loc.includes(r))) return false;
 
-    return true; // US cities, "Remote", "Worldwide", "Anywhere", "North America", etc. all pass
+    return true;
+}
+
+/** True when a job requires US citizenship or clearance F-1 holders can't get. Sponsorship not required. */
+export function isUSCitizenshipRequired(title = '', description = '') {
+    const text = `${title} ${description}`.toLowerCase();
+    const blocked = [
+        'us citizen', 'u.s. citizen', 'us citizenship', 'u.s. citizenship',
+        'united states citizen', 'must be a citizen', 'must be a u.s. citizen',
+        'citizenship required', 'citizens only', 'citizen only',
+        'active secret clearance', 'top secret clearance', 'ts/sci',
+        'security clearance required', 'ability to obtain a security clearance',
+        'ability to obtain clearance', 'clearance is required',
+    ];
+    return blocked.some(kw => text.includes(kw));
+}
+
+/** Categories shown in the UI role filter chips. */
+export const TECH_ROLE_CATEGORIES = [
+    'swe', 'frontend', 'backend', 'fullstack', 'ai', 'ml',
+    'data-science', 'data-engineer', 'data-analyst', 'devops',
+];
+
+/** Search terms for ATS APIs (Workday, etc.) — tech roles only, not new-grad specific. */
+export const TECH_SEARCH_TERMS = [
+    'software engineer',
+    'software developer',
+    'frontend engineer',
+    'backend engineer',
+    'full stack engineer',
+    'machine learning engineer',
+    'ml engineer',
+    'ai engineer',
+    'data scientist',
+    'data engineer',
+    'data analyst',
+    'devops engineer',
+    'site reliability engineer',
+    'mlops engineer',
+];
+
+/** True when title/description maps to one of our tech role categories. */
+export function isTechRoleJob(title, description = '') {
+    return classifyCategory(title, description) !== null;
+}
+
+/** Gate before persisting — US-located tech role, not US-citizenship-only. */
+export function isEligibleJob(job) {
+    if (!job?.category) return false;
+    if (!job.url) return false;
+    if (!isUSCompatible(job.location)) return false;
+    if (isUSCitizenshipRequired(job.title, job.description || '')) return false;
+    return true;
 }
 
 /**

@@ -10,6 +10,7 @@
  */
 
 import { makeJobId } from '../utils/helpers.js';
+import { scrapeMarkdown } from '../utils/context.js';
 
 const UA = 'Mozilla/5.0 (compatible; JobHunterPro/1.0)';
 const TIMEOUT = 12000;
@@ -72,16 +73,17 @@ async function fetchLever(slug) {
 }
 
 async function fetchAshby(slug) {
-    const resp = await fetch(`https://boards-api.ashbyhq.com/posting-api/job-board/${slug}`, {
+    const resp = await fetch(`https://api.ashbyhq.com/posting-api/job-board/${slug}`, {
         headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT),
     });
     if (!resp.ok) throw new Error(`Ashby HTTP ${resp.status}`);
     const data = await resp.json();
-    return (data.jobPostings || []).map(j => ({
+    const rows = data.jobs || data.jobPostings || [];
+    return rows.map(j => ({
         id: makeJobId(j.jobUrl || `ashby-${slug}-${j.id}`),
         title: j.title || '',
         url: j.jobUrl || `https://jobs.ashbyhq.com/${slug}/${j.id}`,
-        location: j.locationName || j.workplaceType || 'US',
+        location: j.location || j.locationName || j.workplaceType || 'US',
         posted_at: j.publishedAt ? new Date(j.publishedAt).toISOString() : new Date().toISOString(),
         source: 'ashby',
     }));
@@ -216,35 +218,55 @@ export async function fetchAtsJobs({ ats_type, ats_slug, career_url }) {
  * Inspect a "custom" career page and try to discover the ATS powering it.
  * Many bespoke-looking career pages embed Greenhouse/Lever/Workday/etc.
  * Returns { ats_type, ats_slug, career_url } or null.
+ *
+ * @param {string} careerUrl
+ * @param {boolean} useContextDev  When true, use context.dev scrape-markdown
+ *   (renders JS + iframes, finds embeds raw fetch misses). Pass true only on
+ *   first-time company checks — it costs 1 credit per call.
  */
-export async function resolveEmbeddedAts(careerUrl) {
+export async function resolveEmbeddedAts(careerUrl, useContextDev = false) {
     if (!careerUrl) return null;
-    let html = '';
+
+    let haystack = '';
     let finalUrl = careerUrl;
-    try {
-        const resp = await fetch(careerUrl, {
-            redirect: 'follow',
-            headers: { 'User-Agent': UA },
-            signal: AbortSignal.timeout(TIMEOUT),
-        });
-        finalUrl = resp.url || careerUrl;
-        html = await resp.text();
-    } catch {
-        return null;
+
+    if (useContextDev) {
+        try {
+            const { markdown, url } = await scrapeMarkdown(careerUrl, {
+                waitForMs: 2000,
+                includeFrames: true,
+                timeoutMs: 30000,
+            });
+            finalUrl = url || careerUrl;
+            haystack = `${finalUrl}\n${markdown}`;
+        } catch {
+            useContextDev = false; // fall through to raw fetch
+        }
     }
 
-    const haystack = `${finalUrl}\n${html}`;
+    if (!useContextDev) {
+        try {
+            const resp = await fetch(careerUrl, {
+                redirect: 'follow',
+                headers: { 'User-Agent': UA },
+                signal: AbortSignal.timeout(TIMEOUT),
+            });
+            finalUrl = resp.url || careerUrl;
+            haystack = `${finalUrl}\n${await resp.text()}`;
+        } catch {
+            return null;
+        }
+    }
+
     for (const { type, regex } of ATS_URL_PATTERNS) {
         const match = haystack.match(regex);
         if (!match) continue;
 
         if (type === 'workday') {
-            // For Workday we need the full URL to derive tenant + site.
             return { ats_type: 'workday', ats_slug: null, career_url: match[0] };
         }
         const slug = match[1];
         if (!slug || slug.length < 2) continue;
-        // Build a canonical career_url for reference/notifications.
         const canonical = {
             greenhouse: `https://boards.greenhouse.io/${slug}`,
             lever: `https://jobs.lever.co/${slug}`,

@@ -26,19 +26,6 @@ const LEVER_COMPANIES = [
     'citadel', 'citadelsecurities', 'sig', 'drw', 'imc',
 ];
 
-const NEW_GRAD_KEYWORDS = [
-    'new grad', 'new graduate', 'entry level', 'entry-level',
-    'junior', '2025', '2026', 'university grad', 'campus hire',
-    'associate', 'early career',
-];
-
-function isNewGrad(title, tags = []) {
-    const text = (title + ' ' + tags.join(' ')).toLowerCase();
-    return NEW_GRAD_KEYWORDS.some(kw => text.includes(kw));
-}
-
-// classifyCategory imported from helpers
-
 export async function scrapeLever(filterSenior = true, extraCompanies = []) {
     const jobs = [];
     const allCompanies = [...new Set([...LEVER_COMPANIES, ...extraCompanies])];
@@ -59,10 +46,12 @@ export async function scrapeLever(filterSenior = true, extraCompanies = []) {
             const postings = await resp.json();
             if (!Array.isArray(postings)) continue;
 
+            let companyCount = 0;
             for (const posting of postings) {
                 const title = posting.text || '';
-                const tags = posting.tags || [];
-                if (!isNewGrad(title, tags)) continue;
+                const description = posting.descriptionPlain?.slice(0, 500) || '';
+                const category = classifyCategory(title, description);
+                if (!category) continue;
                 if (filterSenior && isSeniorRole(title)) continue;
 
                 const jobUrl = posting.hostedUrl || `https://jobs.lever.co/${company}/${posting.id}`;
@@ -78,14 +67,17 @@ export async function scrapeLever(filterSenior = true, extraCompanies = []) {
                     location,
                     url: jobUrl,
                     source: 'lever',
-                    category: classifyCategory(title),
+                    category,
                     salary: null,
-                    description: posting.descriptionPlain?.slice(0, 500) || null,
+                    description: description || null,
                     posted_at: postedAt,
                 });
+                companyCount++;
             }
 
-            if (postings.length) console.log(`✅ Lever [${company}]: checked ${postings.length} postings`);
+            if (postings.length) {
+                console.log(`✅ Lever [${company}]: ${companyCount} tech roles (${postings.length} total)`);
+            }
             await sleep(300);
         } catch (err) {
             if (!err.message.includes('404')) {

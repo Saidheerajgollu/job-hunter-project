@@ -7,12 +7,6 @@
 
 import { makeJobId, isSeniorRole, classifyCategory, isUSCompatible } from '../utils/helpers.js';
 
-const NEW_GRAD_KEYWORDS = [
-    'new grad', 'new graduate', 'entry level', 'entry-level',
-    'junior', '2025', '2026', 'early career', 'associate engineer',
-    'university', 'campus',
-];
-
 // Remotive category slugs that are relevant to us
 const RELEVANT_CATEGORIES = [
     'software-dev',
@@ -21,11 +15,6 @@ const RELEVANT_CATEGORIES = [
     'product',
     'all-others',
 ];
-
-function isNewGrad(title = '', description = '') {
-    const text = (title + ' ' + description.slice(0, 300)).toLowerCase();
-    return NEW_GRAD_KEYWORDS.some(kw => text.includes(kw));
-}
 
 export async function scrapeRemotive(filterSenior = true) {
     const allJobs = [];
@@ -59,13 +48,14 @@ export async function scrapeRemotive(filterSenior = true) {
                     ? job.description.replace(/<[^>]*>/g, '').slice(0, 500)
                     : '';
 
-                if (!isNewGrad(title, description)) continue;
-                if (filterSenior && isSeniorRole(title)) continue;
-
                 const jobUrl = job.url;
                 const rawLocation = job.candidate_required_location || '';
                 if (!isUSCompatible(rawLocation)) continue;
                 const location = rawLocation || 'Remote/US';
+
+                const category = classifyCategory(title, description);
+                if (!category) continue;
+                if (filterSenior && isSeniorRole(title)) continue;
 
                 allJobs.push({
                     id: makeJobId(jobUrl),
@@ -74,7 +64,7 @@ export async function scrapeRemotive(filterSenior = true) {
                     location,
                     url: jobUrl,
                     source: 'remotive',
-                    category: classifyCategory(title, description),
+                    category,
                     salary: job.salary || null,
                     description: description || null,
                     posted_at: job.publication_date
@@ -89,6 +79,6 @@ export async function scrapeRemotive(filterSenior = true) {
         }
     }
 
-    console.log(`✅ Remotive total: ${allJobs.length} new grad jobs found`);
+    console.log(`✅ Remotive total: ${allJobs.length} tech jobs found`);
     return allJobs;
 }

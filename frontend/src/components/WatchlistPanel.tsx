@@ -275,9 +275,16 @@ export function NotificationBell() {
 export function WatchlistPanel() {
     const [companies, setCompanies] = useState<WatchedCompany[]>([]);
     const [showModal, setShowModal] = useState(false);
-    const [open, setOpen] = useState(true);
+    const [open, setOpen] = useState(false); // collapsed by default
     const [importing, setImporting] = useState<string | null>(null);
     const [importMsg, setImportMsg] = useState('');
+    const [checking, setChecking] = useState(false);
+
+    // Restore user's last open/close preference from localStorage
+    useEffect(() => {
+        const stored = localStorage.getItem('watchlist_open');
+        if (stored !== null) setOpen(stored === 'true');
+    }, []);
 
     const load = useCallback(async () => {
         try { setCompanies(await api.getWatchedCompanies()); } catch { /* ignore */ }
@@ -288,6 +295,20 @@ export function WatchlistPanel() {
     async function handleRemove(id: string) {
         await api.removeWatchedCompany(id);
         load();
+    }
+
+    async function handleCheckNow() {
+        setChecking(true);
+        setImportMsg('');
+        try {
+            await api.triggerWatchlist();
+            setImportMsg('Checking all watched companies…');
+            setTimeout(() => load(), 8000);
+            setTimeout(() => setImportMsg(''), 12000);
+        } catch {
+            setImportMsg('Check failed — is the backend running?');
+        }
+        setChecking(false);
     }
 
     async function handlePreset(presetId: string) {
@@ -306,7 +327,17 @@ export function WatchlistPanel() {
 
     return (
         <div className="watchlist-panel">
-            <div className="watchlist-header" onClick={() => setOpen(o => !o)}>
+            <div
+                className="watchlist-header"
+                style={{ borderBottom: open ? undefined : 'none' }}
+                onClick={() => {
+                    setOpen(o => {
+                        const next = !o;
+                        localStorage.setItem('watchlist_open', String(next));
+                        return next;
+                    });
+                }}
+            >
                 <div className="watchlist-title">
                     <span>Watchlist</span>
                     {companies.length > 0 && (
@@ -337,6 +368,14 @@ export function WatchlistPanel() {
                         title="100 Bay Area OPT-friendly companies"
                     >
                         {importing === 'bay-area-opt' ? '…' : 'Bay Area'}
+                    </button>
+                    <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={handleCheckNow}
+                        disabled={checking || companies.length === 0}
+                        title="Run watchlist check now"
+                    >
+                        {checking ? '…' : 'Check now'}
                     </button>
                     <button
                         className="btn btn-secondary btn-sm"

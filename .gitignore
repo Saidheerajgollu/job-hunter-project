@@ -15,12 +15,17 @@ backend/data/
 *.db-shm
 *.db-wal
 
-# Environment files
+# Environment files — never commit secrets
 .env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+!**/.env.example
+!**/.env.local.example
+backend/.env
+frontend/.env.local
+
+# Local agent/IDE config (optional)
+.claude/
 
 # Logs
 npm-debug.log*

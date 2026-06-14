@@ -19,24 +19,14 @@ import { makeJobId, isSeniorRole, classifyCategory, isUSCompatible, sleep } from
 
 const RAPIDAPI_HOST = 'active-jobs-db.p.rapidapi.com';
 
-// A few phrase filters covering the new-grad tech roles we care about.
-// Each filter = 1 API call. 3 calls × 2 runs/day × 30 days = ~180 calls/month.
+// Title filters for tech roles — not limited to new grads.
 const TITLE_FILTERS = [
     '"software engineer" | "software developer"',
-    '"new grad" | "new graduate" | "entry level"',
     '"machine learning" | "data engineer" | "ai engineer"',
+    '"data scientist" | "data analyst"',
+    '"frontend engineer" | "backend engineer" | "full stack"',
+    '"devops engineer" | "site reliability engineer" | "mlops"',
 ];
-
-const NEW_GRAD_KEYWORDS = [
-    'new grad', 'new graduate', 'entry level', 'entry-level',
-    'junior', 'associate', 'early career', 'university', 'campus',
-    '2025', '2026', 'i ', ' i', 'sde i', 'swe i', 'level 1',
-];
-
-function isNewGradRole(title, desc = '') {
-    const text = (title + ' ' + (desc || '').slice(0, 300)).toLowerCase();
-    return NEW_GRAD_KEYWORDS.some(kw => text.includes(kw));
-}
 
 function deriveLocation(item) {
     if (Array.isArray(item.locations_derived) && item.locations_derived.length) {
@@ -101,7 +91,6 @@ export async function scrapeFantasticJobs(filterSenior = true) {
 
                 const title = item.title || '';
                 if (!title) continue;
-                if (!isNewGradRole(title, item.description_text || item.description || '')) continue;
                 if (filterSenior && isSeniorRole(title)) continue;
 
                 const location = deriveLocation(item);

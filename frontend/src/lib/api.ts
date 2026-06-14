@@ -11,10 +11,15 @@ export interface Job {
     category: 'swe' | 'frontend' | 'backend' | 'fullstack' | 'ai' | 'ml' | 'data-science' | 'data-engineer' | 'data-analyst' | 'devops';
     salary: string | null;
     description: string | null;
+    notes: string | null;
     posted_at: string;
+    previous_posted_at: string | null;
+    reposted_at: string | null;
     scraped_at: string;
+    applied_at: string | null;
     status: 'new' | 'saved' | 'applied' | 'ignored';
     is_new: number;
+    is_reposted: number;
     is_fresh: number;
 }
 
@@ -28,8 +33,10 @@ export interface JobsResponse {
 export interface Stats {
     total: number;
     new_count: number;
+    count_new: number;
     applied: number;
     saved: number;
+    ignored: number;
     last_24h: number;
     last_run: {
         id: number;
@@ -44,9 +51,14 @@ export interface Stats {
 export interface JobFilters {
     status?: string;
     category?: string;
+    role?: string;
     source?: string;
     search?: string;
     fresh_only?: string;
+    has_salary?: string;
+    max_age_days?: string;
+    experience?: string;
+    us_only?: string;
     page?: number;
     limit?: number;
 }
@@ -101,6 +113,7 @@ export const api = {
         Object.entries(filters).forEach(([k, v]) => {
             if (v !== undefined && v !== null && v !== '') params.set(k, String(v));
         });
+        if (!params.has('us_only')) params.set('us_only', '1');
         return apiFetch<JobsResponse>(`/jobs?${params}`);
     },
 
@@ -108,6 +121,12 @@ export const api = {
         apiFetch<{ ok: boolean }>(`/jobs/${id}/status`, {
             method: 'PATCH',
             body: JSON.stringify({ status }),
+        }),
+
+    updateJobNotes: (id: string, notes: string | null) =>
+        apiFetch<{ ok: boolean }>(`/jobs/${id}/notes`, {
+            method: 'PATCH',
+            body: JSON.stringify({ notes }),
         }),
 
     markAllSeen: () =>
@@ -171,4 +190,7 @@ export const api = {
             method: 'POST',
             body: JSON.stringify({ preset_id }),
         }),
+
+    triggerWatchlist: () =>
+        apiFetch<{ ok: boolean; message: string }>('/companies/watch/run', { method: 'POST' }),
 };

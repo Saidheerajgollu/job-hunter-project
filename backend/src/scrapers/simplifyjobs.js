@@ -64,6 +64,9 @@ export async function scrapeSimplifyJobs(filterSenior = true) {
             // Must have a URL
             if (!listing.url) continue;
 
+            const category = classifyCategory(listing.title || '', SIMPLIFY_CATEGORY_HINT[listing.category] || '');
+            if (!category) continue;
+
             const location = Array.isArray(listing.locations) && listing.locations.length > 0
                 ? listing.locations.join(' | ')
                 : 'US';
@@ -79,14 +82,14 @@ export async function scrapeSimplifyJobs(filterSenior = true) {
                 location,
                 url: listing.url,
                 source: 'simplifyjobs',
-                category: classifyCategory(listing.title || '', SIMPLIFY_CATEGORY_HINT[listing.category] || ''),
+                category,
                 salary: null,
                 description: null,
                 posted_at: postedAt,
             });
         }
 
-        console.log(`✅ SimplifyJobs: ${jobs.length} active new-grad jobs found`);
+        console.log(`✅ SimplifyJobs: ${jobs.length} active tech jobs found`);
     } catch (err) {
         console.error(`❌ SimplifyJobs error: ${err.message}`);
     }

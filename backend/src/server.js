@@ -5,10 +5,10 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { startScheduler, triggerScrape } from './scheduler.js';
+import { startScheduler, triggerScrape, triggerWatcher } from './scheduler.js';
 import {
     initDb,
-    getJobs, countJobs, updateJobStatus, markAllSeen,
+    getJobs, countJobs, updateJobStatus, updateJobNotes, markAllSeen,
     getStats, getAllSettings, upsertSetting, getLastScrapeRun,
     getAllJobsForReclassify, updateJobCategory,
     getWatchedCompanies, getWatchedCompany, insertWatchedCompany, deleteWatchedCompany,
@@ -16,6 +16,7 @@ import {
 } from './db.js';
 import { classifyCategory, makeJobId } from './utils/helpers.js';
 import { detectATS } from './utils/atsDetector.js';
+import { DEFAULT_WATCH_ROLES_JSON } from './utils/roleFilters.js';
 import { initPush, getVapidPublicKey, sendPushToAll } from './utils/pushNotifications.js';
 import { SEATTLE_PRESET } from './data/seattleCompanies.js';
 import { NYC_PRESET } from './data/nycCompanies.js';
@@ -51,15 +52,19 @@ const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
 app.get('/api/jobs', wrap(async (req, res) => {
-    const { status, category, source, search, page = 1, limit = 50, fresh_only } = req.query;
+    const { status, category, role, source, search, page = 1, limit = 50, fresh_only, has_salary, max_age_days, experience, us_only } = req.query;
     const offset = (parseInt(page) - 1) * parseInt(limit);
 
     const params = {
         status: status || null,
-        category: category || null,
+        role: role || category || null,
         source: source || null,
-        search: search ? `%${search}%` : null,
-        fresh_only: fresh_only === '1' ? 1 : 0,
+        search: search || null,
+        fresh_only: fresh_only === '1',
+        has_salary: has_salary === '1',
+        max_age_days: max_age_days ? parseInt(max_age_days) : 0,
+        experience: experience || null,
+        us_only: us_only !== '0',
         limit: parseInt(limit),
         offset,
     };
@@ -83,6 +88,13 @@ app.patch('/api/jobs/:id/status', wrap(async (req, res) => {
 
 app.post('/api/jobs/mark-seen', wrap(async (_req, res) => {
     await markAllSeen();
+    res.json({ ok: true });
+}));
+
+app.patch('/api/jobs/:id/notes', wrap(async (req, res) => {
+    const { id } = req.params;
+    const { notes } = req.body;
+    await updateJobNotes(notes ?? null, id);
     res.json({ ok: true });
 }));
 
@@ -164,7 +176,7 @@ app.post('/api/companies', wrap(async (req, res) => {
         career_url: detectedAts.career_url || career_url || null,
         ats_type: detectedAts.ats_type,
         ats_slug: detectedAts.ats_slug || ats_slug || null,
-        watch_roles: watch_roles ? JSON.stringify(watch_roles) : '["software engineer","SWE","SDE","data engineer","machine learning"]',
+        watch_roles: watch_roles ? JSON.stringify(watch_roles) : DEFAULT_WATCH_ROLES_JSON,
     });
 
     res.json({ ok: true, company: await getWatchedCompany(id) });
@@ -205,13 +217,19 @@ app.post('/api/companies/bulk', wrap(async (req, res) => {
             career_url: c.career_url || null,
             ats_type: c.ats_type || 'custom',
             ats_slug: c.ats_slug || null,
-            watch_roles: '["software engineer","SWE","SDE","data engineer","machine learning","data scientist"]',
+            watch_roles: DEFAULT_WATCH_ROLES_JSON,
         });
         if (inserted) added++;
         else skipped++;
     }
 
     res.json({ ok: true, added, skipped, total: preset.companies.length });
+}));
+
+// Manually trigger watchlist check (runs in background)
+app.post('/api/companies/watch/run', wrap(async (_req, res) => {
+    triggerWatcher();
+    res.json({ ok: true, message: 'Watchlist check started' });
 }));
 
 // ── Push Notifications ────────────────────────────────────────────────────────

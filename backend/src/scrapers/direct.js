@@ -55,16 +55,6 @@ const DIRECT_CAREER_FEEDS = [
     },
 ];
 
-const NEW_GRAD_KEYWORDS = [
-    'new grad', 'new graduate', 'entry level', 'entry-level',
-    'junior', '2025', '2026', 'university', 'campus', 'associate', 'early career',
-];
-
-function isNewGrad(title) {
-    const lower = title.toLowerCase();
-    return NEW_GRAD_KEYWORDS.some(kw => lower.includes(kw));
-}
-
 async function fetchGreenhouseFeed(feed, filterSenior) {
     const jobs = [];
     const resp = await fetch(feed.url, {
@@ -75,20 +65,23 @@ async function fetchGreenhouseFeed(feed, filterSenior) {
 
     const data = await resp.json();
     for (const job of (data.jobs || [])) {
-        if (!isNewGrad(job.title || '')) continue;
-        if (filterSenior && isSeniorRole(job.title)) continue;
+        const title = job.title || '';
+        const description = job.content ? job.content.replace(/<[^>]*>/g, '').slice(0, 500) : '';
+        const category = classifyCategory(title, description);
+        if (!category) continue;
+        if (filterSenior && isSeniorRole(title)) continue;
 
         const url = job.absolute_url || `https://boards.greenhouse.io/${feed.company}/jobs/${job.id}`;
         jobs.push({
             id: makeJobId(url),
-            title: job.title,
+            title,
             company: feed.company,
             location: job.location?.name || 'US',
             url,
             source: 'direct',
-            category: classifyCategory(job.title),
+            category,
             salary: null,
-            description: null,
+            description: description || null,
             posted_at: job.updated_at ? new Date(job.updated_at).toISOString() : new Date().toISOString(),
         });
     }
@@ -106,7 +99,7 @@ export async function scrapeDirectCareerPages(filterSenior = true) {
             }
             // Tesla and Apple direct feeds are complex; skip for now and rely on Workday/Greenhouse
             jobs.push(...feedJobs);
-            if (feedJobs.length) console.log(`✅ Direct [${feed.company}]: ${feedJobs.length} new grad roles`);
+            if (feedJobs.length) console.log(`✅ Direct [${feed.company}]: ${feedJobs.length} tech roles`);
             await sleep(400);
         } catch (err) {
             console.error(`❌ Direct [${feed.company}]: ${err.message}`);
