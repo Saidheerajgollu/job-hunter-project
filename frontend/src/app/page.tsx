@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, Job, Stats, JobFilters } from '@/lib/api';
 import { WatchlistPanel, NotificationBell } from '@/components/WatchlistPanel';
+import { ReachOutFooter } from '@/components/ReachOutFooter';
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,10 @@ function formatSource(source: string) {
         himalayas: 'Himalayas', weworkremotely: 'WWR',
     };
     return labels[source] || source;
+}
+
+function shouldShowSourceBadge(source: string) {
+    return !source?.toLowerCase().includes('simplify');
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -129,6 +134,11 @@ const CATEGORIES = [
     { value: 'data-engineer', label: 'Data Engineer' },
     { value: 'data-analyst', label: 'Data Analyst' },
     { value: 'devops', label: 'DevOps / Cloud' },
+];
+
+const LOCATION_FILTERS = [
+    { value: '1', label: 'US only' },
+    { value: '0', label: 'All locations' },
 ];
 
 const EXPERIENCE_LEVELS = [
@@ -228,6 +238,25 @@ function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
                 </div>
             </div>
 
+            {/* Location filter row */}
+            <div className="filter-row">
+                <span className="filter-chips-label">Location</span>
+                <div className="filter-chips">
+                    {LOCATION_FILTERS.map(loc => {
+                        const active = (filters.us_only ?? '1') === loc.value;
+                        return (
+                            <button
+                                key={loc.value}
+                                className={`chip ${active ? 'active' : ''}`}
+                                onClick={() => onChange({ us_only: loc.value, page: 1 })}
+                            >
+                                {loc.label}
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+
             {/* Experience filter row */}
             <div className="filter-row">
                 <span className="filter-chips-label">Exp</span>
@@ -251,21 +280,21 @@ function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
                     <button
                         className={`chip chip-fresh ${filters.fresh_only === '1' ? 'active' : ''}`}
                         onClick={() => toggleAge('fresh_only', '1')}
-                        title="Jobs scraped in the last 24 hours"
+                        title="Posted on the company portal in the last 24 hours"
                     >
-                        Today
+                        Last 24h
                     </button>
                     <button
                         className={`chip chip-week ${filters.max_age_days === '7' ? 'active' : ''}`}
                         onClick={() => toggleAge('max_age_days', '7')}
-                        title="Jobs scraped in the last 7 days"
+                        title="Posted on the portal in the last 7 days"
                     >
                         This week
                     </button>
                     <button
                         className={`chip chip-month ${filters.max_age_days === '30' ? 'active' : ''}`}
                         onClick={() => toggleAge('max_age_days', '30')}
-                        title="Jobs scraped in the last 30 days"
+                        title="Posted on the portal in the last 30 days (default)"
                     >
                         This month
                     </button>
@@ -378,10 +407,12 @@ function JobCard({
                 </div>
 
                 <div className="job-badges">
-                    {job.is_fresh === 1 && <span className="badge badge-fresh">Today</span>}
+                    {job.is_fresh === 1 && <span className="badge badge-fresh">Recent</span>}
                     {job.is_reposted === 1 && <span className="badge badge-reposted">Reposted</span>}
                     {job.is_new === 1 && <span className="badge badge-new">New</span>}
-                    <span className="badge badge-source">{formatSource(job.source)}</span>
+                    {shouldShowSourceBadge(job.source) && (
+                        <span className="badge badge-source">{formatSource(job.source)}</span>
+                    )}
                     <span className={`badge badge-cat-${job.category}`}>{catLabel}</span>
                     {job.status === 'applied' && <span className="badge badge-applied">Applied</span>}
                     {job.status === 'saved' && <span className="badge badge-saved">Saved</span>}
@@ -521,7 +552,7 @@ export default function Home() {
     const [stats, setStats] = useState<Stats | null>(null);
     const [loading, setLoading] = useState(true);
     const [scraping, setScraping] = useState(false);
-    const [filters, setFilters] = useState<JobFilters>({ page: 1, limit: 30 });
+    const [filters, setFilters] = useState<JobFilters>({ page: 1, limit: 30, us_only: '1', max_age_days: '30' });
     const [gradLabel, setGradLabel] = useState('2026 new grad');
     const { toasts, show: showToast } = useToast();
 
@@ -751,8 +782,9 @@ export default function Home() {
                     </div>
                 )}
 
+                <ReachOutFooter />
+
                 <footer className="page-footer-rule">
-                    <span>Grid 12 · Baseline 8</span>
                     <span>{total.toLocaleString()} indexed</span>
                 </footer>
             </main>

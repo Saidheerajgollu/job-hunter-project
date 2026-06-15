@@ -151,3 +151,19 @@ cd frontend && npm run dev
 ## License
 
 MIT — personal use. Job data belongs to the original sources; this project aggregates publicly available APIs and feeds.
+
+## Reach out
+
+<p align="center">
+  <a href="https://github.com/Saidheerajgollu" title="GitHub">
+    <img alt="GitHub" src="https://img.shields.io/badge/GitHub-181717?style=for-the-badge&logo=github&logoColor=white" height="32">
+  </a>
+  &nbsp;
+  <a href="https://linkedin.com/in/sai-dheeraj-gollu" title="LinkedIn">
+    <img alt="LinkedIn" src="https://img.shields.io/badge/LinkedIn-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white" height="32">
+  </a>
+  &nbsp;
+  <a href="https://saidheerajgollu.com" title="Website">
+    <img alt="Website" src="https://img.shields.io/badge/saidheerajgollu.com-C41E3A?style=for-the-badge&logo=googlechrome&logoColor=white" height="32">
+  </a>
+</p>

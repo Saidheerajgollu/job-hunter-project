@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
+import { ReachOutFooter } from '@/components/ReachOutFooter';
 
 export default function SettingsPage() {
     const [settings, setSettings] = useState<Record<string, string>>({});
@@ -159,6 +160,7 @@ export default function SettingsPage() {
                         </div>
                     </div>
                 )}
+                <ReachOutFooter />
             </main>
         </div>
     );
