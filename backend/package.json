@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "scrape": "node src/scrapeOnce.js"
+    "scrape": "node src/scrapeOnce.js",
+    "test": "vitest run"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -19,5 +20,8 @@
     "node-cron": "^3.0.3",
     "pg": "^8.13.1",
     "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }

@@ -59,6 +59,7 @@ function formatSource(source: string) {
         simplifyjobs: 'SimplifyJobs', jsearch: 'JSearch', fantasticjobs: 'Fantastic.jobs',
         remoteok: 'RemoteOK', remotive: 'Remotive', adzuna: 'Adzuna', direct: 'Direct',
         himalayas: 'Himalayas', weworkremotely: 'WWR',
+        smartrecruiters: 'SmartRecruiters', workable: 'Workable', recruitee: 'Recruitee',
     };
     return labels[source] || source;
 }
@@ -155,6 +156,9 @@ const SOURCES = [
     { value: 'greenhouse', label: 'Greenhouse' },
     { value: 'lever', label: 'Lever' },
     { value: 'ashby', label: 'Ashby' },
+    { value: 'smartrecruiters', label: 'SmartRecruiters' },
+    { value: 'workable', label: 'Workable' },
+    { value: 'recruitee', label: 'Recruitee' },
     { value: 'workday', label: 'Workday' },
     { value: 'simplifyjobs', label: 'SimplifyJobs' },
     { value: 'jsearch', label: 'JSearch' },

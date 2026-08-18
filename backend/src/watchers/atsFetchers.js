@@ -89,7 +89,7 @@ async function fetchAshby(slug) {
     }));
 }
 
-async function fetchSmartRecruiters(slug) {
+export async function fetchSmartRecruiters(slug) {
     const resp = await fetch(`https://api.smartrecruiters.com/v1/companies/${slug}/postings?limit=100`, {
         headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT),
     });
@@ -109,7 +109,7 @@ async function fetchSmartRecruiters(slug) {
     });
 }
 
-async function fetchWorkable(slug) {
+export async function fetchWorkable(slug) {
     // Public careers widget JSON (no auth). Falls back gracefully on shape changes.
     const resp = await fetch(`https://www.workable.com/api/accounts/${slug}?details=true`, {
         headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT),
@@ -130,7 +130,7 @@ async function fetchWorkable(slug) {
     });
 }
 
-async function fetchRecruitee(slug) {
+export async function fetchRecruitee(slug) {
     const resp = await fetch(`https://${slug}.recruitee.com/api/offers/`, {
         headers: { 'User-Agent': UA, Accept: 'application/json' }, signal: AbortSignal.timeout(TIMEOUT),
     });
