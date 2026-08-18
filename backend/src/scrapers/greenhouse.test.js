@@ -1,5 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { scrapeGreenhouse } from './greenhouse.js';
+
+vi.mock('../utils/helpers.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return { ...actual, sleep: vi.fn().mockResolvedValue(undefined) };
+});
 
 function mockFetch(handler) {
     vi.stubGlobal('fetch', vi.fn(handler));
@@ -11,16 +16,21 @@ afterEach(() => {
 
 describe('scrapeGreenhouse', () => {
     it('includes a company in polledCompanies when its fetch succeeds, using the formatted company name', async () => {
-        mockFetch(async () => ({
-            ok: true,
-            json: async () => ({
-                jobs: [{
-                    id: 1, title: 'Software Engineer',
-                    absolute_url: 'https://boards.greenhouse.io/testco/jobs/1',
-                    location: { name: 'Remote' }, updated_at: '2026-01-01T00:00:00.000Z',
-                }],
-            }),
-        }));
+        mockFetch(async (url) => {
+            if (String(url).includes('testco')) {
+                return {
+                    ok: true,
+                    json: async () => ({
+                        jobs: [{
+                            id: 1, title: 'Software Engineer',
+                            absolute_url: 'https://boards.greenhouse.io/testco/jobs/1',
+                            location: { name: 'Remote' }, updated_at: '2026-01-01T00:00:00.000Z',
+                        }],
+                    }),
+                };
+            }
+            return { ok: true, json: async () => ({ jobs: [] }) };
+        });
 
         const { jobs, polledCompanies } = await scrapeGreenhouse(true, ['testco']);
 

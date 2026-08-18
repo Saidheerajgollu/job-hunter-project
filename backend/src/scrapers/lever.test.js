@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { scrapeLever } from './lever.js';
 
+vi.mock('../utils/helpers.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return { ...actual, sleep: vi.fn().mockResolvedValue(undefined) };
+});
+
 function mockFetch(handler) {
     vi.stubGlobal('fetch', vi.fn(handler));
 }
@@ -11,14 +16,19 @@ afterEach(() => {
 
 describe('scrapeLever', () => {
     it('includes a company in polledCompanies when its fetch succeeds, using the formatted company name', async () => {
-        mockFetch(async () => ({
-            ok: true,
-            json: async () => ([{
-                id: 'abc', text: 'Backend Engineer',
-                hostedUrl: 'https://jobs.lever.co/test-co/abc',
-                categories: { location: 'Remote' }, createdAt: 1735689600000,
-            }]),
-        }));
+        mockFetch(async (url) => {
+            if (String(url).includes('test-co')) {
+                return {
+                    ok: true,
+                    json: async () => ([{
+                        id: 'abc', text: 'Backend Engineer',
+                        hostedUrl: 'https://jobs.lever.co/test-co/abc',
+                        categories: { location: 'Remote' }, createdAt: 1735689600000,
+                    }]),
+                };
+            }
+            return { ok: true, json: async () => ([]) };
+        });
 
         const { jobs, polledCompanies } = await scrapeLever(true, ['test-co']);
 
