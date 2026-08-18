@@ -17,6 +17,7 @@ export interface Job {
     reposted_at: string | null;
     scraped_at: string;
     applied_at: string | null;
+    closed_at: string | null;
     status: 'new' | 'saved' | 'applied' | 'ignored';
     is_new: number;
     is_reposted: number;

@@ -411,6 +411,7 @@ function JobCard({
                 </div>
 
                 <div className="job-badges">
+                    {job.closed_at && <span className="badge badge-closed">Listing closed</span>}
                     {job.is_fresh === 1 && <span className="badge badge-fresh">Recent</span>}
                     {job.is_reposted === 1 && <span className="badge badge-reposted">Reposted</span>}
                     {job.is_new === 1 && <span className="badge badge-new">New</span>}
