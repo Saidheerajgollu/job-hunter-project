@@ -311,7 +311,7 @@ export async function closeStaleJobs(source, polledCompanies, freshUrls, missThr
 
 const JOB_COLUMNS = `
   id, title, company, location, url, source, category, salary, description, notes,
-  posted_at, previous_posted_at, reposted_at, scraped_at, applied_at, status,
+  posted_at, previous_posted_at, reposted_at, scraped_at, applied_at, status, closed_at,
   is_new::int AS is_new,
   is_reposted::int AS is_reposted,
   (CASE WHEN scraped_at >= now() - interval '24 hours' THEN 1 ELSE 0 END) AS is_fresh

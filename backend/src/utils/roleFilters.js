@@ -269,6 +269,11 @@ export function buildJobQueryFilters({
     const conditions = [];
     const params = [];
 
+    // Closed listings drop out of the default feed — a user who already
+    // saved or applied keeps seeing their own history, badged as closed
+    // by the frontend instead of vanishing.
+    conditions.push(`(closed_at IS NULL OR status IN ('saved', 'applied'))`);
+
     if (status) {
         params.push(status);
         conditions.push(`status = $${params.length}`);
