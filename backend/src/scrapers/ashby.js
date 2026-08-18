@@ -46,6 +46,7 @@ const ASHBY_COMPANIES = [
 
 export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
     const jobs = [];
+    const polledCompanies = [];
     const extraObjs = extraCompanies.map(slug => ({ slug, name: slug }));
     const allCompanies = [
         ...ASHBY_COMPANIES,
@@ -67,6 +68,7 @@ export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
 
             const data = await resp.json();
             const postings = data.jobs || data.jobPostings || [];
+            polledCompanies.push(company.name);
             let companyCount = 0;
 
             for (const posting of postings) {
@@ -109,5 +111,5 @@ export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
         }
     }
 
-    return jobs;
+    return { jobs, polledCompanies };
 }

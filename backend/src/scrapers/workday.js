@@ -90,6 +90,7 @@ async function fetchWorkdayJobs(company, careerUrl) {
 
 export async function scrapeWorkday(filterSenior = true) {
     const jobs = [];
+    const polledCompanies = [];
 
     for (const { company, careerUrl } of WORKDAY_COMPANIES) {
         try {
@@ -97,6 +98,9 @@ export async function scrapeWorkday(filterSenior = true) {
             if (!wd) continue;
 
             const postings = await fetchWorkdayJobs(company, careerUrl);
+            if (postings.length > 0) {
+                polledCompanies.push(company);
+            }
 
             for (const posting of postings) {
                 const title = posting.title || '';
@@ -129,5 +133,5 @@ export async function scrapeWorkday(filterSenior = true) {
         }
     }
 
-    return jobs;
+    return { jobs, polledCompanies };
 }
