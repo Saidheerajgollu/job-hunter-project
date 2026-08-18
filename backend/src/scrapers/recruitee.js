@@ -19,6 +19,7 @@ const RECRUITEE_COMPANIES = [
 
 export async function scrapeRecruitee(filterSenior = true, extraCompanies = []) {
     const jobs = [];
+    const polledCompanies = [];
     const extraObjs = extraCompanies.map(slug => ({ slug, name: slug }));
     const allCompanies = [
         ...RECRUITEE_COMPANIES,
@@ -28,6 +29,7 @@ export async function scrapeRecruitee(filterSenior = true, extraCompanies = []) 
     for (const company of allCompanies) {
         try {
             const postings = await fetchPostings(company.slug);
+            polledCompanies.push(company.name);
 
             for (const posting of postings) {
                 // Title-only classification: the shared fetcher doesn't carry a
@@ -62,5 +64,5 @@ export async function scrapeRecruitee(filterSenior = true, extraCompanies = []) 
         }
     }
 
-    return jobs;
+    return { jobs, polledCompanies };
 }

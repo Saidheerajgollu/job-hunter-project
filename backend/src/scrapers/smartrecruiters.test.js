@@ -26,7 +26,7 @@ describe('scrapeSmartRecruiters', () => {
             source: 'smartrecruiters',
         }]);
 
-        const jobs = await scrapeSmartRecruiters(true, ['testco']);
+        const { jobs } = await scrapeSmartRecruiters(true, ['testco']);
 
         expect(jobs).toContainEqual({
             id: 'abc123',
@@ -48,7 +48,7 @@ describe('scrapeSmartRecruiters', () => {
             posted_at: 'now', source: 'smartrecruiters',
         }]);
 
-        const jobs = await scrapeSmartRecruiters(true, ['testco']);
+        const { jobs } = await scrapeSmartRecruiters(true, ['testco']);
         expect(jobs).toHaveLength(0);
     });
 
@@ -58,7 +58,7 @@ describe('scrapeSmartRecruiters', () => {
             posted_at: 'now', source: 'smartrecruiters',
         }]);
 
-        const jobs = await scrapeSmartRecruiters(true, ['testco']);
+        const { jobs } = await scrapeSmartRecruiters(true, ['testco']);
         expect(jobs).toHaveLength(0);
     });
 
@@ -71,7 +71,7 @@ describe('scrapeSmartRecruiters', () => {
 
         // 'Visa' is already a hardcoded seed company; 'visa' is a case-variant
         // a discovery pass could surface from a differently-cased listing URL.
-        await scrapeSmartRecruiters(true, ['visa']);
+        const { } = await scrapeSmartRecruiters(true, ['visa']);
 
         const visaCalls = calls.filter(s => s.toLowerCase() === 'visa');
         expect(visaCalls).toHaveLength(1);
@@ -90,9 +90,36 @@ describe('scrapeSmartRecruiters', () => {
             return [];
         });
 
-        const jobs = await scrapeSmartRecruiters(true, ['broken', 'testco']);
+        const { jobs } = await scrapeSmartRecruiters(true, ['broken', 'testco']);
 
         expect(jobs).toHaveLength(1);
         expect(jobs[0].id).toBe('ok1');
+    });
+
+    it('includes a company in polledCompanies when its fetch succeeds, excludes it when the fetch throws', async () => {
+        vi.mocked(fetchSmartRecruiters).mockImplementation(async (s) => {
+            if (s === 'broken') throw new Error('SmartRecruiters HTTP 500');
+            if (s === 'testco') {
+                return [{
+                    id: 'ok1', title: 'Backend Engineer', url: 'https://x', location: 'US',
+                    posted_at: 'now', source: 'smartrecruiters',
+                }];
+            }
+            return [];
+        });
+
+        const { polledCompanies } = await scrapeSmartRecruiters(true, ['broken', 'testco']);
+
+        expect(polledCompanies).toContain('testco');
+        expect(polledCompanies).not.toContain('broken');
+    });
+
+    it('includes a company in polledCompanies even with zero postings this run', async () => {
+        vi.mocked(fetchSmartRecruiters).mockResolvedValue([]);
+
+        const { jobs, polledCompanies } = await scrapeSmartRecruiters(true, ['quietco']);
+
+        expect(jobs).toEqual([]);
+        expect(polledCompanies).toContain('quietco');
     });
 });

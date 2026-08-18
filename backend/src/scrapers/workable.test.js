@@ -26,7 +26,7 @@ describe('scrapeWorkable', () => {
             source: 'workable',
         }]);
 
-        const jobs = await scrapeWorkable(true, ['testco']);
+        const { jobs } = await scrapeWorkable(true, ['testco']);
 
         expect(jobs).toContainEqual({
             id: 'abc123',
@@ -48,7 +48,7 @@ describe('scrapeWorkable', () => {
             posted_at: 'now', source: 'workable',
         }]);
 
-        const jobs = await scrapeWorkable(true, ['testco']);
+        const { jobs } = await scrapeWorkable(true, ['testco']);
         expect(jobs).toHaveLength(0);
     });
 
@@ -58,7 +58,7 @@ describe('scrapeWorkable', () => {
             posted_at: 'now', source: 'workable',
         }]);
 
-        const jobs = await scrapeWorkable(true, ['testco']);
+        const { jobs } = await scrapeWorkable(true, ['testco']);
         expect(jobs).toHaveLength(0);
     });
 
@@ -71,7 +71,7 @@ describe('scrapeWorkable', () => {
 
         // 'salesloft' is already a hardcoded seed company; 'Salesloft' is a
         // case-variant a discovery pass could surface from a listing URL.
-        await scrapeWorkable(true, ['Salesloft']);
+        const { } = await scrapeWorkable(true, ['Salesloft']);
 
         const matches = calls.filter(s => s.toLowerCase() === 'salesloft');
         expect(matches).toHaveLength(1);
@@ -90,9 +90,36 @@ describe('scrapeWorkable', () => {
             return [];
         });
 
-        const jobs = await scrapeWorkable(true, ['broken', 'testco']);
+        const { jobs } = await scrapeWorkable(true, ['broken', 'testco']);
 
         expect(jobs).toHaveLength(1);
         expect(jobs[0].id).toBe('ok1');
+    });
+
+    it('includes a company in polledCompanies when its fetch succeeds, excludes it when the fetch throws', async () => {
+        vi.mocked(fetchWorkable).mockImplementation(async (s) => {
+            if (s === 'broken') throw new Error('Workable HTTP 500');
+            if (s === 'testco') {
+                return [{
+                    id: 'ok1', title: 'DevOps Engineer', url: 'https://x', location: 'US',
+                    posted_at: 'now', source: 'workable',
+                }];
+            }
+            return [];
+        });
+
+        const { polledCompanies } = await scrapeWorkable(true, ['broken', 'testco']);
+
+        expect(polledCompanies).toContain('testco');
+        expect(polledCompanies).not.toContain('broken');
+    });
+
+    it('includes a company in polledCompanies even with zero postings this run', async () => {
+        vi.mocked(fetchWorkable).mockResolvedValue([]);
+
+        const { jobs, polledCompanies } = await scrapeWorkable(true, ['quietco']);
+
+        expect(jobs).toEqual([]);
+        expect(polledCompanies).toContain('quietco');
     });
 });

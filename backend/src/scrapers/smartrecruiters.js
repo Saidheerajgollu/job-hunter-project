@@ -32,11 +32,13 @@ function mergeCompanies(seedList, extraSlugs) {
 
 export async function scrapeSmartRecruiters(filterSenior = true, extraCompanies = []) {
     const jobs = [];
+    const polledCompanies = [];
     const allCompanies = mergeCompanies(SMARTRECRUITERS_COMPANIES, extraCompanies);
 
     for (const company of allCompanies) {
         try {
             const postings = await fetchPostings(company.slug);
+            polledCompanies.push(company.name);
 
             for (const posting of postings) {
                 // Title-only classification: the shared fetcher doesn't carry a
@@ -71,5 +73,5 @@ export async function scrapeSmartRecruiters(filterSenior = true, extraCompanies 
         }
     }
 
-    return jobs;
+    return { jobs, polledCompanies };
 }

@@ -26,7 +26,7 @@ describe('scrapeRecruitee', () => {
             source: 'recruitee',
         }]);
 
-        const jobs = await scrapeRecruitee(true, ['testco']);
+        const { jobs } = await scrapeRecruitee(true, ['testco']);
 
         expect(jobs).toContainEqual({
             id: 'abc123',
@@ -48,7 +48,7 @@ describe('scrapeRecruitee', () => {
             posted_at: 'now', source: 'recruitee',
         }]);
 
-        const jobs = await scrapeRecruitee(true, ['testco']);
+        const { jobs } = await scrapeRecruitee(true, ['testco']);
         expect(jobs).toHaveLength(0);
     });
 
@@ -58,7 +58,7 @@ describe('scrapeRecruitee', () => {
             posted_at: 'now', source: 'recruitee',
         }]);
 
-        const jobs = await scrapeRecruitee(true, ['testco']);
+        const { jobs } = await scrapeRecruitee(true, ['testco']);
         expect(jobs).toHaveLength(0);
     });
 
@@ -74,9 +74,36 @@ describe('scrapeRecruitee', () => {
             return [];
         });
 
-        const jobs = await scrapeRecruitee(true, ['broken', 'testco']);
+        const { jobs } = await scrapeRecruitee(true, ['broken', 'testco']);
 
         expect(jobs).toHaveLength(1);
         expect(jobs[0].id).toBe('ok1');
+    });
+
+    it('includes a company in polledCompanies when its fetch succeeds, excludes it when the fetch throws', async () => {
+        vi.mocked(fetchRecruitee).mockImplementation(async (s) => {
+            if (s === 'broken') throw new Error('Recruitee HTTP 500');
+            if (s === 'testco') {
+                return [{
+                    id: 'ok1', title: 'Site Reliability Engineer', url: 'https://x', location: 'US',
+                    posted_at: 'now', source: 'recruitee',
+                }];
+            }
+            return [];
+        });
+
+        const { polledCompanies } = await scrapeRecruitee(true, ['broken', 'testco']);
+
+        expect(polledCompanies).toContain('testco');
+        expect(polledCompanies).not.toContain('broken');
+    });
+
+    it('includes a company in polledCompanies even with zero postings this run', async () => {
+        vi.mocked(fetchRecruitee).mockResolvedValue([]);
+
+        const { jobs, polledCompanies } = await scrapeRecruitee(true, ['quietco']);
+
+        expect(jobs).toEqual([]);
+        expect(polledCompanies).toContain('quietco');
     });
 });
