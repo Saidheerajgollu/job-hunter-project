@@ -22,6 +22,7 @@ import { scrapeJSearch } from './scrapers/jsearch.js';
 import { scrapeFantasticJobs } from './scrapers/fantasticJobs.js';
 import { scrapeBigTech } from './scrapers/bigtech.js';
 import { runCompanyWatcher } from './watchers/companyWatcher.js';
+import { runFastAtsPoll } from './fastPoll.js';
 import { insertJob, getAllSettings } from './db.js';
 import { isEligibleJob } from './utils/helpers.js';
 
@@ -30,13 +31,21 @@ let isJSearchRunning = false;
 let isFantasticRunning = false;
 let isWatcherRunning = false;
 let isBigTechRunning = false;
+let isFastPollRunning = false;
 
 export function startScheduler() {
-    console.log('⏰ Scheduler initialized — main scraper hourly, watcher every 30 min, JSearch every 12h');
+    console.log('⏰ Scheduler initialized — main scraper hourly, fast ATS poll every 15 min, watcher every 30 min, JSearch every 12h');
 
     // Main scraper: defer first run 3 min after boot (avoids startup memory spike), then hourly.
     setTimeout(() => runScraperSafe(), 3 * 60 * 1000);
     cron.schedule('0 * * * *', () => runScraperSafe());
+
+    // Fast ATS poll: the 7 direct-ATS sources (Greenhouse/Lever/Ashby/Workday/
+    // SmartRecruiters/Workable/Recruitee), all companies not just watchlisted
+    // ones, plus staleness/ghost-job detection. First run 2 min after boot,
+    // then every 15 minutes.
+    setTimeout(() => runFastAtsPollSafe(), 2 * 60 * 1000);
+    cron.schedule('*/15 * * * *', () => runFastAtsPollSafe());
 
     // Company watcher: first run 1 min after startup, then every 30 minutes.
     // The isWatcherRunning guard skips a cycle if the previous one is still going.
@@ -184,5 +193,21 @@ async function runBigTechSafe() {
     }
 }
 
+async function runFastAtsPollSafe() {
+    if (isFastPollRunning) {
+        console.log('⚠️  Fast ATS poll already running, skipping this cycle');
+        return;
+    }
+    isFastPollRunning = true;
+    try {
+        await runFastAtsPoll();
+    } catch (err) {
+        console.error('💥 Fatal fast-ATS-poll error:', err);
+    } finally {
+        isFastPollRunning = false;
+    }
+}
+
 export { runScraperSafe as triggerScrape };
 export { runWatcherSafe as triggerWatcher };
+export { runFastAtsPollSafe as triggerFastAtsPoll };
