@@ -28,6 +28,7 @@ const LEVER_COMPANIES = [
 
 export async function scrapeLever(filterSenior = true, extraCompanies = []) {
     const jobs = [];
+    const polledCompanies = [];
     const allCompanies = [...new Set([...LEVER_COMPANIES, ...extraCompanies])];
 
     for (const company of allCompanies) {
@@ -46,6 +47,9 @@ export async function scrapeLever(filterSenior = true, extraCompanies = []) {
             const postings = await resp.json();
             if (!Array.isArray(postings)) continue;
 
+            const companyName = company.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            polledCompanies.push(companyName);
+
             let companyCount = 0;
             for (const posting of postings) {
                 const title = posting.text || '';
@@ -63,7 +67,7 @@ export async function scrapeLever(filterSenior = true, extraCompanies = []) {
                 jobs.push({
                     id: makeJobId(jobUrl),
                     title,
-                    company: company.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                    company: companyName,
                     location,
                     url: jobUrl,
                     source: 'lever',
@@ -86,5 +90,5 @@ export async function scrapeLever(filterSenior = true, extraCompanies = []) {
         }
     }
 
-    return jobs;
+    return { jobs, polledCompanies };
 }

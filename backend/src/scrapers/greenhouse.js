@@ -56,6 +56,7 @@ const GREENHOUSE_COMPANIES = [
 
 export async function scrapeGreenhouse(filterSenior = true, extraCompanies = []) {
     const jobs = [];
+    const polledCompanies = [];
     const allCompanies = [...new Set([...GREENHOUSE_COMPANIES, ...extraCompanies])];
 
     for (const company of allCompanies) {
@@ -73,6 +74,8 @@ export async function scrapeGreenhouse(filterSenior = true, extraCompanies = [])
 
             const data = await resp.json();
             const allJobs = data.jobs || [];
+            const companyName = company.charAt(0).toUpperCase() + company.slice(1);
+            polledCompanies.push(companyName);
 
             let companyCount = 0;
             for (const job of allJobs) {
@@ -89,7 +92,7 @@ export async function scrapeGreenhouse(filterSenior = true, extraCompanies = [])
                 jobs.push({
                     id: makeJobId(jobUrl),
                     title,
-                    company: company.charAt(0).toUpperCase() + company.slice(1),
+                    company: companyName,
                     location,
                     url: jobUrl,
                     source: 'greenhouse',
@@ -112,5 +115,5 @@ export async function scrapeGreenhouse(filterSenior = true, extraCompanies = [])
         }
     }
 
-    return jobs;
+    return { jobs, polledCompanies };
 }
