@@ -695,9 +695,16 @@ describe('scrapeAshby', () => {
 
 `backend/src/scrapers/workday.test.js`:
 
+Note: `scrapeWorkday` calls `await sleep(600)` after every company's `fetchWorkdayJobs()` call returns — including on failure, since `fetchWorkdayJobs` catches its own errors internally and returns `[]` rather than throwing (see the Note after Step 4 below). With 16 hardcoded `WORKDAY_COMPANIES`, that's 16 × 600ms ≈ 9.6s if `sleep` isn't mocked — over vitest's default 5s test timeout regardless of which companies succeed or fail. Mock `sleep` to resolve instantly, the same fix Task 3 needed for Greenhouse/Lever's larger company lists.
+
 ```js
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { scrapeWorkday } from './workday.js';
+
+vi.mock('../utils/helpers.js', async (importOriginal) => {
+    const actual = await importOriginal();
+    return { ...actual, sleep: vi.fn().mockResolvedValue(undefined) };
+});
 
 function mockFetch(handler) {
     vi.stubGlobal('fetch', vi.fn(handler));
