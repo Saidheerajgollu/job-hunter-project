@@ -91,6 +91,7 @@ async function fetchWorkdayJobs(company, careerUrl) {
 export async function scrapeWorkday(filterSenior = true) {
     const jobs = [];
     const polledCompanies = [];
+    const seenUrls = [];
 
     for (const { company, careerUrl } of WORKDAY_COMPANIES) {
         try {
@@ -107,10 +108,12 @@ export async function scrapeWorkday(filterSenior = true) {
             }
 
             for (const posting of postings) {
+                const jobUrl = `https://${wd.host}${posting.externalPath}`;
+                seenUrls.push(jobUrl);
+
                 const title = posting.title || '';
                 if (filterSenior && isSeniorRole(title)) continue;
 
-                const jobUrl = `https://${wd.host}${posting.externalPath}`;
                 const category = classifyCategory(title);
                 if (!category) continue;
 
@@ -137,5 +140,5 @@ export async function scrapeWorkday(filterSenior = true) {
         }
     }
 
-    return { jobs, polledCompanies };
+    return { jobs, polledCompanies, seenUrls };
 }

@@ -33,6 +33,7 @@ function mergeCompanies(seedList, extraSlugs) {
 export async function scrapeSmartRecruiters(filterSenior = true, extraCompanies = []) {
     const jobs = [];
     const polledCompanies = [];
+    const seenUrls = [];
     const allCompanies = mergeCompanies(SMARTRECRUITERS_COMPANIES, extraCompanies);
 
     for (const company of allCompanies) {
@@ -41,6 +42,8 @@ export async function scrapeSmartRecruiters(filterSenior = true, extraCompanies 
             polledCompanies.push(company.name);
 
             for (const posting of postings) {
+                seenUrls.push(posting.url);
+
                 // Title-only classification: the shared fetcher doesn't carry a
                 // description field for this ATS, so ambiguous titles that Ashby's
                 // richer payload would resolve via description are dropped here instead.
@@ -73,5 +76,5 @@ export async function scrapeSmartRecruiters(filterSenior = true, extraCompanies 
         }
     }
 
-    return { jobs, polledCompanies };
+    return { jobs, polledCompanies, seenUrls };
 }

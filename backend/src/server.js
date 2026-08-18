@@ -5,7 +5,7 @@
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
-import { startScheduler, triggerScrape, triggerWatcher } from './scheduler.js';
+import { startScheduler, triggerScrape, triggerFastAtsPoll, triggerWatcher } from './scheduler.js';
 import {
     initDb,
     getJobs, countJobs, updateJobStatus, updateJobNotes, markAllSeen,
@@ -124,6 +124,7 @@ app.post('/api/scrape/run', (_req, res) => {
     res.json({ ok: true, message: 'Scrape started in background' });
     // Don't await — let it run in background
     triggerScrape().catch(console.error);
+    triggerFastAtsPoll().catch(console.error);
 });
 
 // ── Settings ──────────────────────────────────────────────────────────────────

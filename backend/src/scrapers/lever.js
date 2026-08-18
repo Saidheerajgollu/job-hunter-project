@@ -29,6 +29,7 @@ const LEVER_COMPANIES = [
 export async function scrapeLever(filterSenior = true, extraCompanies = []) {
     const jobs = [];
     const polledCompanies = [];
+    const seenUrls = [];
     const allCompanies = [...new Set([...LEVER_COMPANIES, ...extraCompanies])];
 
     for (const company of allCompanies) {
@@ -52,13 +53,15 @@ export async function scrapeLever(filterSenior = true, extraCompanies = []) {
 
             let companyCount = 0;
             for (const posting of postings) {
+                const jobUrl = posting.hostedUrl || `https://jobs.lever.co/${company}/${posting.id}`;
+                seenUrls.push(jobUrl);
+
                 const title = posting.text || '';
                 const description = posting.descriptionPlain?.slice(0, 500) || '';
                 const category = classifyCategory(title, description);
                 if (!category) continue;
                 if (filterSenior && isSeniorRole(title)) continue;
 
-                const jobUrl = posting.hostedUrl || `https://jobs.lever.co/${company}/${posting.id}`;
                 const location = posting.categories?.location || posting.workplaceType || 'Remote/US';
                 const postedAt = posting.createdAt
                     ? new Date(posting.createdAt).toISOString()
@@ -90,5 +93,5 @@ export async function scrapeLever(filterSenior = true, extraCompanies = []) {
         }
     }
 
-    return { jobs, polledCompanies };
+    return { jobs, polledCompanies, seenUrls };
 }

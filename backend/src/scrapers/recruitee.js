@@ -20,6 +20,7 @@ const RECRUITEE_COMPANIES = [
 export async function scrapeRecruitee(filterSenior = true, extraCompanies = []) {
     const jobs = [];
     const polledCompanies = [];
+    const seenUrls = [];
     const extraObjs = extraCompanies.map(slug => ({ slug, name: slug }));
     const allCompanies = [
         ...RECRUITEE_COMPANIES,
@@ -32,6 +33,8 @@ export async function scrapeRecruitee(filterSenior = true, extraCompanies = []) 
             polledCompanies.push(company.name);
 
             for (const posting of postings) {
+                seenUrls.push(posting.url);
+
                 // Title-only classification: the shared fetcher doesn't carry a
                 // description field for this ATS, so ambiguous titles that Ashby's
                 // richer payload would resolve via description are dropped here instead.
@@ -64,5 +67,5 @@ export async function scrapeRecruitee(filterSenior = true, extraCompanies = []) 
         }
     }
 
-    return { jobs, polledCompanies };
+    return { jobs, polledCompanies, seenUrls };
 }

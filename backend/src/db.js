@@ -226,9 +226,9 @@ export async function insertJob(job) {
                reposted_at = now(),
                scraped_at = now(),
                is_new = true,
-               last_seen_at = now(),
-               missed_count = 0,
-               closed_at = NULL
+               last_seen_at = CASE WHEN source = $10 THEN now() ELSE last_seen_at END,
+               missed_count = CASE WHEN source = $10 THEN 0 ELSE missed_count END,
+               closed_at = CASE WHEN source = $10 THEN NULL ELSE closed_at END
              WHERE url = $9`,
             [
                 job.title,
@@ -240,6 +240,7 @@ export async function insertJob(job) {
                 job.posted_at ?? null,
                 previousPosted,
                 job.url,
+                job.source,
             ]
         );
         return true;
@@ -254,9 +255,10 @@ export async function insertJob(job) {
            salary = $5,
            description = COALESCE($6, description),
            posted_at = COALESCE($7, posted_at),
-           last_seen_at = now(),
-           missed_count = 0,
-           closed_at = NULL
+           scraped_at = now(),
+           last_seen_at = CASE WHEN source = $9 THEN now() ELSE last_seen_at END,
+           missed_count = CASE WHEN source = $9 THEN 0 ELSE missed_count END,
+           closed_at = CASE WHEN source = $9 THEN NULL ELSE closed_at END
          WHERE url = $8`,
         [
             job.title,
@@ -267,6 +269,7 @@ export async function insertJob(job) {
             job.description ?? null,
             job.posted_at ?? null,
             job.url,
+            job.source,
         ]
     );
     return false;

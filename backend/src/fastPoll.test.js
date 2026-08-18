@@ -25,7 +25,7 @@ import { discoverATSCompanies } from './utils/discoverCompanies.js';
 import { insertJob, closeStaleJobs, getAllSettings } from './db.js';
 import { runFastAtsPoll } from './fastPoll.js';
 
-const EMPTY = { jobs: [], polledCompanies: [] };
+const EMPTY = { jobs: [], polledCompanies: [], seenUrls: [] };
 
 function mockAllEmpty() {
     vi.mocked(scrapeGreenhouse).mockResolvedValue(EMPTY);
@@ -57,6 +57,7 @@ describe('runFastAtsPoll', () => {
                 category: 'swe', salary: null, description: null, posted_at: '2026-01-01T00:00:00.000Z',
             }],
             polledCompanies: ['Testco'],
+            seenUrls: ['https://boards.greenhouse.io/testco/jobs/1'],
         });
 
         const result = await runFastAtsPoll();
@@ -79,6 +80,7 @@ describe('runFastAtsPoll', () => {
                 category: 'swe', salary: null, description: null, posted_at: '2026-01-01T00:00:00.000Z',
             }],
             polledCompanies: ['Testco'],
+            seenUrls: ['https://jobs.lever.co/testco/1'],
         });
 
         await runFastAtsPoll();
@@ -88,6 +90,80 @@ describe('runFastAtsPoll', () => {
             'lever',
             ['Testco'],
             ['https://jobs.lever.co/testco/1']
+        );
+    });
+
+    it('passes the full seenUrls list (not just classified jobs) to closeStaleJobs, so a posting the classifier drops is never mistaken for closed', async () => {
+        vi.mocked(scrapeGreenhouse).mockResolvedValue({
+            jobs: [{
+                id: 'gh1', title: 'Software Engineer', company: 'Testco', location: 'Remote, US',
+                url: 'https://boards.greenhouse.io/testco/jobs/1', source: 'greenhouse',
+                category: 'swe', salary: null, description: null, posted_at: '2026-01-01T00:00:00.000Z',
+            }],
+            polledCompanies: ['Testco'],
+            seenUrls: [
+                'https://boards.greenhouse.io/testco/jobs/1',
+                'https://boards.greenhouse.io/testco/jobs/2',
+            ],
+        });
+
+        await runFastAtsPoll();
+
+        expect(closeStaleJobs).toHaveBeenCalledWith(
+            'greenhouse',
+            ['Testco'],
+            ['https://boards.greenhouse.io/testco/jobs/1', 'https://boards.greenhouse.io/testco/jobs/2']
+        );
+    });
+
+    it('disables the closer sweep for Workday and SmartRecruiters (sampled/capped listings) by passing an empty polledCompanies list', async () => {
+        vi.mocked(scrapeWorkday).mockResolvedValue({
+            jobs: [{
+                id: 'wd1', title: 'Software Engineer', company: 'Salesforce', location: 'San Francisco, CA',
+                url: 'https://salesforce.wd1.myworkdayjobs.com/jobs/1', source: 'workday',
+                category: 'swe', salary: null, description: null, posted_at: '2026-01-01T00:00:00.000Z',
+            }],
+            polledCompanies: ['Salesforce'],
+            seenUrls: ['https://salesforce.wd1.myworkdayjobs.com/jobs/1'],
+        });
+        vi.mocked(scrapeSmartRecruiters).mockResolvedValue({
+            jobs: [{
+                id: 'sr1', title: 'Software Engineer', company: 'Visa', location: 'Austin, TX',
+                url: 'https://jobs.smartrecruiters.com/Visa/1', source: 'smartrecruiters',
+                category: 'swe', salary: null, description: null, posted_at: '2026-01-01T00:00:00.000Z',
+            }],
+            polledCompanies: ['Visa'],
+            seenUrls: ['https://jobs.smartrecruiters.com/Visa/1'],
+        });
+
+        await runFastAtsPoll();
+
+        // Closer disabled: real polledCompanies replaced with [] so closeStaleJobs no-ops.
+        expect(closeStaleJobs).toHaveBeenCalledWith(
+            'workday', [], ['https://salesforce.wd1.myworkdayjobs.com/jobs/1']
+        );
+        expect(closeStaleJobs).toHaveBeenCalledWith(
+            'smartrecruiters', [], ['https://jobs.smartrecruiters.com/Visa/1']
+        );
+        expect(closeStaleJobs).not.toHaveBeenCalledWith('workday', ['Salesforce'], expect.anything());
+        expect(closeStaleJobs).not.toHaveBeenCalledWith('smartrecruiters', ['Visa'], expect.anything());
+
+        // Jobs still get inserted for these sources — only closing is disabled.
+        expect(insertJob).toHaveBeenCalledWith(expect.objectContaining({ id: 'wd1' }));
+        expect(insertJob).toHaveBeenCalledWith(expect.objectContaining({ id: 'sr1' }));
+    });
+
+    it('keeps the closer sweep enabled for complete-enumeration sources, passing their real polledCompanies', async () => {
+        vi.mocked(scrapeGreenhouse).mockResolvedValue({
+            jobs: [],
+            polledCompanies: ['Testco'],
+            seenUrls: ['https://boards.greenhouse.io/testco/jobs/1'],
+        });
+
+        await runFastAtsPoll();
+
+        expect(closeStaleJobs).toHaveBeenCalledWith(
+            'greenhouse', ['Testco'], ['https://boards.greenhouse.io/testco/jobs/1']
         );
     });
 

@@ -47,6 +47,7 @@ const ASHBY_COMPANIES = [
 export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
     const jobs = [];
     const polledCompanies = [];
+    const seenUrls = [];
     const extraObjs = extraCompanies.map(slug => ({ slug, name: slug }));
     const allCompanies = [
         ...ASHBY_COMPANIES,
@@ -72,14 +73,20 @@ export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
             let companyCount = 0;
 
             for (const posting of postings) {
+                // isListed === false means the posting is no longer live on the
+                // board, so it is deliberately NOT recorded in seenUrls — it
+                // should be eligible for the staleness closer sweep.
                 if (posting.isListed === false) continue;
+
+                const jobUrl = posting.jobUrl || `https://jobs.ashbyhq.com/${company.slug}/${posting.id}`;
+                seenUrls.push(jobUrl);
+
                 const title = posting.title || '';
                 const description = posting.descriptionPlain || posting.descriptionHtml || '';
                 const category = classifyCategory(title, description);
                 if (!category) continue;
                 if (filterSenior && isSeniorRole(title)) continue;
 
-                const jobUrl = posting.jobUrl || `https://jobs.ashbyhq.com/${company.slug}/${posting.id}`;
                 const location = posting.location || posting.locationName || posting.workplaceType || 'Remote/US';
                 const postedAt = posting.publishedAt
                     ? new Date(posting.publishedAt).toISOString()
@@ -111,5 +118,5 @@ export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
         }
     }
 
-    return { jobs, polledCompanies };
+    return { jobs, polledCompanies, seenUrls };
 }

@@ -37,7 +37,7 @@ ALTER TABLE jobs ADD COLUMN IF NOT EXISTS missed_count INTEGER NOT NULL DEFAULT 
 ALTER TABLE jobs ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ;
 ```
 
-`closed_at IS NULL` means the job is considered open — no separate boolean is needed, and a non-null value doubles as "closed since" for display. `last_seen_at` is distinct from the existing `scraped_at` (which today only updates on insert or repost, not on every "still here, unchanged" observation) and distinct from `posted_at` (the portal-reported date, not something we control).
+`closed_at IS NULL` means the job is considered open — no separate boolean is needed, and a non-null value doubles as "closed since" for display. `last_seen_at` is a second, independent timestamp added for this staleness feature — **not** a replacement for the existing `scraped_at`. `scraped_at` must keep updating on *every* observation, including the "still here, unchanged" plain-update path: `isRelistRepost()` in `db.js` compares `Date.now() - scraped_at >= 7 days` to detect a listing that was removed and re-posted, so freezing `scraped_at` would make every continuously-open job falsely trigger the relist-repost branch every 7 days, forever. Both timestamps are written on each observation; `last_seen_at` additionally carries the source-scoping and miss-counting semantics the closer sweep needs. Both are distinct from `posted_at` (the portal-reported date, not something we control).
 
 ### 2. Scraper contract change (7 direct-ATS scraper modules)
 

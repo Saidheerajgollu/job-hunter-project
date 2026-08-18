@@ -57,6 +57,7 @@ const GREENHOUSE_COMPANIES = [
 export async function scrapeGreenhouse(filterSenior = true, extraCompanies = []) {
     const jobs = [];
     const polledCompanies = [];
+    const seenUrls = [];
     const allCompanies = [...new Set([...GREENHOUSE_COMPANIES, ...extraCompanies])];
 
     for (const company of allCompanies) {
@@ -79,13 +80,15 @@ export async function scrapeGreenhouse(filterSenior = true, extraCompanies = [])
 
             let companyCount = 0;
             for (const job of allJobs) {
+                const jobUrl = job.absolute_url || `https://boards.greenhouse.io/${company}/jobs/${job.id}`;
+                seenUrls.push(jobUrl);
+
                 const title = job.title || '';
                 const description = job.content ? job.content.replace(/<[^>]*>/g, '').slice(0, 500) : '';
                 const category = classifyCategory(title, description);
                 if (!category) continue;
                 if (filterSenior && isSeniorRole(title)) continue;
 
-                const jobUrl = job.absolute_url || `https://boards.greenhouse.io/${company}/jobs/${job.id}`;
                 const location = job.location?.name || 'Remote/Unknown';
                 const postedAt = job.updated_at ? new Date(job.updated_at).toISOString() : new Date().toISOString();
 
@@ -115,5 +118,5 @@ export async function scrapeGreenhouse(filterSenior = true, extraCompanies = [])
         }
     }
 
-    return { jobs, polledCompanies };
+    return { jobs, polledCompanies, seenUrls };
 }
