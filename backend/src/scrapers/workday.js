@@ -98,6 +98,10 @@ export async function scrapeWorkday(filterSenior = true) {
             if (!wd) continue;
 
             const postings = await fetchWorkdayJobs(company, careerUrl);
+            // fetchWorkdayJobs catches errors internally and returns [] for both
+            // "endpoint down" and "zero matching jobs" — indistinguishable. To avoid
+            // false negatives (closing valid listings on a transient outage), only
+            // count this company as polled when results were actually found.
             if (postings.length > 0) {
                 polledCompanies.push(company);
             }

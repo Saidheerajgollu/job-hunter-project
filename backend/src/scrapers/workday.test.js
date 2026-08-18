@@ -46,4 +46,13 @@ describe('scrapeWorkday', () => {
         expect(jobs).toEqual([]);
         expect(polledCompanies).toEqual([]);
     });
+
+    it('excludes a company when all search terms succeed but find zero jobs', async () => {
+        mockFetch(async () => ({ ok: true, json: async () => ({ jobPostings: [] }) }));
+
+        const { jobs, polledCompanies } = await scrapeWorkday(true);
+
+        expect(jobs).toEqual([]);
+        expect(polledCompanies).toEqual([]);
+    });
 });
