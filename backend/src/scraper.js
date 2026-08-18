@@ -6,25 +6,17 @@
  * API or feed, which keeps the backend light, fast, and reliable on Railway.
  */
 
-import { scrapeGreenhouse } from './scrapers/greenhouse.js';
-import { scrapeLever } from './scrapers/lever.js';
-import { scrapeWorkday } from './scrapers/workday.js';
 import { scrapeDirectCareerPages } from './scrapers/direct.js';
 import { scrapeSimplifyJobs } from './scrapers/simplifyjobs.js';
 import { scrapeAdzuna } from './scrapers/adzuna.js';
 import { scrapeRemoteOK } from './scrapers/remoteok.js';
 import { scrapeRemotive } from './scrapers/remotive.js';
-import { scrapeAshby } from './scrapers/ashby.js';
-import { scrapeSmartRecruiters } from './scrapers/smartrecruiters.js';
-import { scrapeWorkable } from './scrapers/workable.js';
-import { scrapeRecruitee } from './scrapers/recruitee.js';
 import { scrapeHimalayas } from './scrapers/himalayas.js';
 import { scrapeWeWorkRemotely } from './scrapers/weworkremotely.js';
 import { scrapeTheMuse } from './scrapers/themuse.js';
 import { scrapeJobicy } from './scrapers/jobicy.js';
 import { scrapeBigTech } from './scrapers/bigtech.js';
 import { scrapePlatformSearch } from './scrapers/platformSearch.js';
-import { discoverATSCompanies } from './utils/discoverCompanies.js';
 import { insertJob, startScrapeRun, finishScrapeRun, getAllSettings } from './db.js';
 import { isEligibleJob } from './utils/helpers.js';
 import { isEnabled as contextDevEnabled } from './utils/context.js';
@@ -44,21 +36,9 @@ export async function runScraper() {
     let totalNew = 0;
     const errors = [];
 
-    // ── Dynamic company discovery ──────────────────────────────────────────────
-    // Fetches the SimplifyJobs listings and extracts ATS slugs, expanding company
-    // coverage far beyond the hardcoded lists. Cached for 6 hours.
-    const discovered = await discoverATSCompanies().catch(() => ({ greenhouse: [], lever: [], ashby: [], smartrecruiters: [], workable: [], recruitee: [] }));
-
     // ── API-based scrapers (no browser needed) ─────────────────────────────────
     const apiScrapers = [
         // ── Core ATS scrapers (always run) ──────────────────────────────────────
-        { name: 'Greenhouse',       fn: () => scrapeGreenhouse(filterSenior, discovered.greenhouse) },
-        { name: 'Lever',            fn: () => scrapeLever(filterSenior, discovered.lever) },
-        { name: 'Ashby',            fn: () => scrapeAshby(filterSenior, discovered.ashby) },
-        { name: 'SmartRecruiters',  fn: () => scrapeSmartRecruiters(filterSenior, discovered.smartrecruiters) },
-        { name: 'Workable',         fn: () => scrapeWorkable(filterSenior, discovered.workable) },
-        { name: 'Recruitee',        fn: () => scrapeRecruitee(filterSenior, discovered.recruitee) },
-        { name: 'Workday',          fn: () => scrapeWorkday(filterSenior) },
         { name: 'Direct Pages',     fn: () => scrapeDirectCareerPages(filterSenior) },
         { name: 'SimplifyJobs',     fn: () => scrapeSimplifyJobs(filterSenior) },
         // ── Free job board APIs (always run) ────────────────────────────────────
