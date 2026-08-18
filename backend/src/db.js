@@ -12,6 +12,7 @@
 import 'dotenv/config';
 import pg from 'pg';
 import { buildJobQueryFilters } from './utils/roleFilters.js';
+import { computeStaleUpdates } from './utils/staleness.js';
 
 const { Pool } = pg;
 
@@ -143,6 +144,9 @@ export async function initDb() {
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS is_reposted BOOLEAN NOT NULL DEFAULT false`);
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS reposted_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS previous_posted_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS missed_count INTEGER NOT NULL DEFAULT 0`);
+    await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ`);
     for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
         await pool.query(
             'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING',
@@ -189,8 +193,8 @@ export async function insertJob(job) {
 
     if (existingRes.rows.length === 0) {
         const res = await pool.query(
-            `INSERT INTO jobs (id, title, company, location, url, source, category, salary, description, posted_at, status, is_new)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',true)`,
+            `INSERT INTO jobs (id, title, company, location, url, source, category, salary, description, posted_at, status, is_new, last_seen_at, missed_count, closed_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',true, now(), 0, NULL)`,
             [
                 job.id, job.title, job.company, job.location ?? null, job.url, job.source,
                 job.category, job.salary ?? null, job.description ?? null, job.posted_at ?? null,
@@ -221,7 +225,10 @@ export async function insertJob(job) {
                is_reposted = true,
                reposted_at = now(),
                scraped_at = now(),
-               is_new = true
+               is_new = true,
+               last_seen_at = now(),
+               missed_count = 0,
+               closed_at = NULL
              WHERE url = $9`,
             [
                 job.title,
@@ -247,7 +254,9 @@ export async function insertJob(job) {
            salary = $5,
            description = COALESCE($6, description),
            posted_at = COALESCE($7, posted_at),
-           scraped_at = now()
+           last_seen_at = now(),
+           missed_count = 0,
+           closed_at = NULL
          WHERE url = $8`,
         [
             job.title,
@@ -261,6 +270,43 @@ export async function insertJob(job) {
         ]
     );
     return false;
+}
+
+/**
+ * Marks jobs closed when they've been missing from `missThreshold` consecutive
+ * polls of their source. Only evaluates jobs belonging to a company that was
+ * actually, successfully polled this run (see fastPoll.js) — a company whose
+ * fetch failed this run is never treated as "now has zero jobs."
+ */
+export async function closeStaleJobs(source, polledCompanies, freshUrls, missThreshold = 2) {
+    if (!polledCompanies.length) return { closed: 0, incremented: 0 };
+
+    const existingRes = await pool.query(
+        `SELECT id, url, missed_count FROM jobs
+         WHERE source = $1 AND company = ANY($2) AND closed_at IS NULL`,
+        [source, polledCompanies]
+    );
+
+    const { toIncrement, toClose } = computeStaleUpdates(
+        existingRes.rows,
+        new Set(freshUrls),
+        missThreshold
+    );
+
+    if (toIncrement.length) {
+        await pool.query(
+            `UPDATE jobs SET missed_count = missed_count + 1 WHERE id = ANY($1)`,
+            [toIncrement]
+        );
+    }
+    if (toClose.length) {
+        await pool.query(
+            `UPDATE jobs SET missed_count = missed_count + 1, closed_at = now() WHERE id = ANY($1)`,
+            [toClose]
+        );
+    }
+
+    return { closed: toClose.length, incremented: toIncrement.length };
 }
 
 const JOB_COLUMNS = `
