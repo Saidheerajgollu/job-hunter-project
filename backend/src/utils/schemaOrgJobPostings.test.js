@@ -89,6 +89,15 @@ describe('parseJobPostings', () => {
         expect(result).toHaveLength(1);
         expect(result[0].title).toBe('Platform Engineer');
     });
+
+    it('does not hang on adversarial input with many unclosed script-like tags', () => {
+        const hostile = '<script '.repeat(50000); // ~450KB of pathological input
+        const start = Date.now();
+        const result = parseJobPostings(hostile);
+        const elapsed = Date.now() - start;
+        expect(result).toEqual([]);
+        expect(elapsed).toBeLessThan(2000); // was previously unbounded/multi-second+
+    });
 });
 
 describe('formatJobLocation', () => {
@@ -109,7 +118,21 @@ describe('formatJobLocation', () => {
         expect(formatJobLocation(posting)).toBe('Remote');
     });
 
-    it('falls back to US when there is no location data at all', () => {
-        expect(formatJobLocation({})).toBe('US');
+    it('falls back to an empty string when there is no location data at all', () => {
+        expect(formatJobLocation({})).toBe('');
+    });
+
+    it('handles jobLocation as an array by using the first element', () => {
+        const posting = {
+            jobLocation: [
+                { address: { addressLocality: 'Denver', addressRegion: 'CO', addressCountry: 'US' } },
+            ],
+        };
+        expect(formatJobLocation(posting)).toBe('Denver, CO, US');
+    });
+
+    it('handles address as a plain string', () => {
+        const posting = { jobLocation: { address: '123 Main St, Chicago, IL' } };
+        expect(formatJobLocation(posting)).toBe('123 Main St, Chicago, IL');
     });
 });

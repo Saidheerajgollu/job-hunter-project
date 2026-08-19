@@ -109,7 +109,7 @@ describe('fetchSchemaOrgJobs', () => {
         expect(job.source).toBe('schema-org');
     });
 
-    it('falls back to the career page URL when a posting has no url field', async () => {
+    it('falls back to a title-derived URL when a posting has no url field', async () => {
         mockFetchHtml(`
             <script type="application/ld+json">
             {"@type":"JobPosting","title":"Backend Engineer"}
@@ -118,12 +118,53 @@ describe('fetchSchemaOrgJobs', () => {
 
         const [job] = await fetchSchemaOrgJobs('https://example.com/careers');
 
-        expect(job.url).toBe('https://example.com/careers');
+        expect(job.url).toBe('https://example.com/careers#Backend Engineer');
     });
 
     it('throws on a non-OK response', async () => {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
         await expect(fetchSchemaOrgJobs('https://example.com/careers')).rejects.toThrow('schema-org HTTP 500');
+    });
+
+    it('throws when the page has no JobPosting data, instead of returning an empty array', async () => {
+        mockFetchHtml('<html><body>No structured data here.</body></html>');
+        await expect(fetchSchemaOrgJobs('https://example.com/careers')).rejects.toThrow('schema-org: no JobPosting data found on page');
+    });
+
+    it('skips a posting with an invalid datePosted rather than throwing', async () => {
+        mockFetchHtml(`
+            <script type="application/ld+json">
+            {"@type":"JobPosting","title":"Data Engineer","url":"https://example.com/jobs/2","datePosted":"TBD"}
+            </script>
+        `);
+        const [job] = await fetchSchemaOrgJobs('https://example.com/careers');
+        expect(job.title).toBe('Data Engineer');
+        expect(new Date(job.posted_at).toString()).not.toBe('Invalid Date');
+    });
+
+    it('does not throw when a posting has a non-string url (a legal JSON-LD id-reference shape)', async () => {
+        mockFetchHtml(`
+            <script type="application/ld+json">
+            {"@type":"JobPosting","title":"Platform Engineer","identifier":"job-42","url":{"@id":"https://example.com/jobs/42"}}
+            </script>
+        `);
+        const [job] = await fetchSchemaOrgJobs('https://example.com/careers');
+        expect(job.title).toBe('Platform Engineer');
+        expect(job.url).toBe('https://example.com/careers#job-42');
+    });
+
+    it('assigns distinct ids to multiple url-less postings on the same page', async () => {
+        mockFetchHtml(`
+            <script type="application/ld+json">
+            [
+              {"@type":"JobPosting","title":"Engineer One"},
+              {"@type":"JobPosting","title":"Engineer Two"}
+            ]
+            </script>
+        `);
+        const jobs = await fetchSchemaOrgJobs('https://example.com/careers');
+        expect(jobs).toHaveLength(2);
+        expect(jobs[0].id).not.toBe(jobs[1].id);
     });
 });
 

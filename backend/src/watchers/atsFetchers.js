@@ -158,17 +158,54 @@ export async function fetchSchemaOrgJobs(careerUrl) {
     const html = await resp.text();
     const postings = parseJobPostings(html);
 
-    return postings.map(p => {
-        const url = p.url || careerUrl;
-        return {
+    // A company is only ever classified `schema-org` because detection saw
+    // real JobPosting data there — zero postings on a later fetch means the
+    // request didn't see the real page (SPA shell, cookie wall, bot
+    // challenge, etc.), not that the board is genuinely empty. Throwing
+    // here (instead of returning []) keeps the caller's stored watch state
+    // untouched, matching how every other fetch failure in this file behaves,
+    // rather than silently zeroing it out and causing a notification burst
+    // once the page recovers.
+    if (postings.length === 0) {
+        throw new Error('schema-org: no JobPosting data found on page');
+    }
+
+    const jobs = [];
+    for (const p of postings) {
+        // This data is hand-authored, third-party JSON-LD — unlike every
+        // other fetcher in this file, which consumes a well-known vendor
+        // REST API, this input must be treated as untrusted: coerce and
+        // validate every field rather than assuming it's well-formed.
+        const title = typeof p.title === 'string' && p.title ? p.title : '';
+
+        const explicitUrl = typeof p.url === 'string' && p.url ? p.url : null;
+        const identifier = typeof p.identifier === 'string' && p.identifier
+            ? p.identifier
+            : (typeof p.identifier?.value === 'string' ? p.identifier.value : null);
+        // Fall back to a per-posting key (identifier, then title) before the
+        // shared careerUrl — falling straight to careerUrl for every
+        // url-less posting on a page would collapse multiple distinct jobs
+        // into a single row (same computed id), last-write-wins.
+        const url = explicitUrl || (identifier ? `${careerUrl}#${identifier}` : (title ? `${careerUrl}#${title}` : null));
+        if (!url) continue; // no usable identity for this posting at all — skip it rather than risk an id collision
+
+        let postedAt = new Date().toISOString();
+        if (p.datePosted) {
+            const parsed = new Date(p.datePosted);
+            if (!Number.isNaN(parsed.getTime())) postedAt = parsed.toISOString();
+        }
+
+        jobs.push({
             id: makeJobId(url),
-            title: p.title || '',
+            title,
             url,
             location: formatJobLocation(p),
-            posted_at: p.datePosted ? new Date(p.datePosted).toISOString() : new Date().toISOString(),
+            posted_at: postedAt,
             source: 'schema-org',
-        };
-    });
+        });
+    }
+
+    return jobs;
 }
 
 /**
