@@ -11,6 +11,7 @@
 
 import { makeJobId } from '../utils/helpers.js';
 import { scrapeMarkdown } from '../utils/context.js';
+import { parseJobPostings, formatJobLocation } from '../utils/schemaOrgJobPostings.js';
 
 const UA = 'Mozilla/5.0 (compatible; JobHunterPro/1.0)';
 const TIMEOUT = 12000;
@@ -30,7 +31,7 @@ export const ATS_URL_PATTERNS = [
 ];
 
 const ATS_TYPES = new Set([
-    'greenhouse', 'lever', 'ashby', 'workday', 'smartrecruiters', 'workable', 'recruitee',
+    'greenhouse', 'lever', 'ashby', 'workday', 'smartrecruiters', 'workable', 'recruitee', 'schema-org',
 ]);
 
 export function isSupportedAts(type) {
@@ -149,6 +150,27 @@ export async function fetchRecruitee(slug) {
     });
 }
 
+export async function fetchSchemaOrgJobs(careerUrl) {
+    const resp = await fetch(careerUrl, {
+        headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT),
+    });
+    if (!resp.ok) throw new Error(`schema-org HTTP ${resp.status}`);
+    const html = await resp.text();
+    const postings = parseJobPostings(html);
+
+    return postings.map(p => {
+        const url = p.url || careerUrl;
+        return {
+            id: makeJobId(url),
+            title: p.title || '',
+            url,
+            location: formatJobLocation(p),
+            posted_at: p.datePosted ? new Date(p.datePosted).toISOString() : new Date().toISOString(),
+            source: 'schema-org',
+        };
+    });
+}
+
 /**
  * Parse a Workday career URL into the pieces needed for its CXS jobs API.
  *   https://intuit.wd5.myworkdayjobs.com/en-US/External  →
@@ -210,6 +232,7 @@ export async function fetchAtsJobs({ ats_type, ats_slug, career_url }) {
         case 'workable': return fetchWorkable(ats_slug);
         case 'recruitee': return fetchRecruitee(ats_slug);
         case 'workday': return fetchWorkday(career_url);
+        case 'schema-org': return fetchSchemaOrgJobs(career_url);
         default: throw new Error(`Unsupported ATS type: ${ats_type}`);
     }
 }
@@ -277,5 +300,10 @@ export async function resolveEmbeddedAts(careerUrl, useContextDev = false) {
         }[type] || finalUrl;
         return { ats_type: type, ats_slug: slug, career_url: canonical };
     }
+
+    if (parseJobPostings(haystack).length > 0) {
+        return { ats_type: 'schema-org', ats_slug: null, career_url: finalUrl };
+    }
+
     return null;
 }
