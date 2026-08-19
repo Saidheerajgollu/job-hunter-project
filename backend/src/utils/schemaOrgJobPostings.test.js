@@ -98,6 +98,15 @@ describe('parseJobPostings', () => {
         expect(result).toEqual([]);
         expect(elapsed).toBeLessThan(2000); // was previously unbounded/multi-second+
     });
+
+    it('does not hang on many well-formed script opens with no closing tags anywhere', () => {
+        const hostile = '<script type="application/ld+json">'.repeat(30000); // ~1.1MB, no </script> anywhere
+        const start = Date.now();
+        const result = parseJobPostings(hostile);
+        const elapsed = Date.now() - start;
+        expect(result).toEqual([]);
+        expect(elapsed).toBeLessThan(2000);
+    });
 });
 
 describe('formatJobLocation', () => {
