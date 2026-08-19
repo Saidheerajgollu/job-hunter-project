@@ -47,6 +47,7 @@ const ATS_LABELS: Record<string, string> = {
     smartrecruiters: 'SmartRecruiters',
     workable: 'Workable',
     recruitee: 'Recruitee',
+    'schema-org': 'Schema.org',
     icims: 'iCIMS',
     taleo: 'Taleo',
     successfactors: 'SuccessFactors',
@@ -62,6 +63,7 @@ const ATS_COLORS: Record<string, string> = {
     smartrecruiters: '#3182CE',
     workable: '#1CAF9A',
     recruitee: '#FF6B6B',
+    'schema-org': '#0EA5E9',
     custom: '#718096',
     unknown: '#718096',
 };
