@@ -60,6 +60,7 @@ function formatSource(source: string) {
         remoteok: 'RemoteOK', remotive: 'Remotive', adzuna: 'Adzuna', direct: 'Direct',
         himalayas: 'Himalayas', weworkremotely: 'WWR',
         smartrecruiters: 'SmartRecruiters', workable: 'Workable', recruitee: 'Recruitee',
+        'schema-org': 'Schema.org',
     };
     return labels[source] || source;
 }
@@ -159,6 +160,7 @@ const SOURCES = [
     { value: 'smartrecruiters', label: 'SmartRecruiters' },
     { value: 'workable', label: 'Workable' },
     { value: 'recruitee', label: 'Recruitee' },
+    { value: 'schema-org', label: 'Schema.org' },
     { value: 'workday', label: 'Workday' },
     { value: 'simplifyjobs', label: 'SimplifyJobs' },
     { value: 'jsearch', label: 'JSearch' },
