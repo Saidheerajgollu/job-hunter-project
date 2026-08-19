@@ -169,6 +169,13 @@ Expected: FAIL — `Cannot find module './schemaOrgJobPostings.js'`
  * actually fetch job listings for one).
  */
 
+// SECURITY NOTE (post-implementation): this regex is vulnerable to
+// catastrophic backtracking (ReDoS) on adversarial HTML — do not copy it.
+// The final whole-branch review and one follow-up fix replaced this
+// approach entirely with a linear indexOf-based scan (extractScriptBlocks)
+// in the actual implementation. See the committed backend/src/utils/schemaOrgJobPostings.js
+// for the real, safe version — this snippet is left as-written for
+// historical accuracy about what Task 1 originally implemented.
 const SCRIPT_BLOCK_RE = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
 
 function isJobPosting(value) {
