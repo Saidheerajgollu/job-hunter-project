@@ -21,8 +21,9 @@ import { initPush, getVapidPublicKey, sendPushToAll } from './utils/pushNotifica
 import { SEATTLE_PRESET } from './presets/seattleCompanies.js';
 import { NYC_PRESET } from './presets/nycCompanies.js';
 import { BAY_AREA_PRESET } from './presets/bayAreaCompanies.js';
+import { WDC_DISCOVERED_PRESET } from './presets/wdcDiscoveredCompanies.js';
 
-const ALL_PRESETS = [SEATTLE_PRESET, NYC_PRESET, BAY_AREA_PRESET];
+const ALL_PRESETS = [SEATTLE_PRESET, NYC_PRESET, BAY_AREA_PRESET, WDC_DISCOVERED_PRESET];
 
 const app = express();
 const PORT = process.env.PORT || 4000;

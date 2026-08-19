@@ -371,6 +371,14 @@ export function WatchlistPanel() {
                     </button>
                     <button
                         className="btn btn-ghost btn-sm"
+                        onClick={() => handlePreset('wdc-discovered')}
+                        disabled={importing !== null}
+                        title="Companies discovered via Web Data Commons' schema.org job-posting data"
+                    >
+                        {importing === 'wdc-discovered' ? '…' : 'WDC Discovered'}
+                    </button>
+                    <button
+                        className="btn btn-ghost btn-sm"
                         onClick={handleCheckNow}
                         disabled={checking || companies.length === 0}
                         title="Run watchlist check now"
