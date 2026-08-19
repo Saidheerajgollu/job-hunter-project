@@ -22,6 +22,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { parseDomainStats, selectCandidateDomains } from '../src/utils/wdcDiscovery.js';
 import { detectATS } from '../src/utils/atsDetector.js';
+import { sleep } from '../src/utils/helpers.js';
 import { SEATTLE_COMPANIES } from '../src/presets/seattleCompanies.js';
 import { NYC_COMPANIES } from '../src/presets/nycCompanies.js';
 import { BAY_AREA_COMPANIES } from '../src/presets/bayAreaCompanies.js';
@@ -71,13 +72,21 @@ function nameFromDomain(domain) {
         .join(' ');
 }
 
+// Escapes a value for embedding in a single-quoted JS string literal in the
+// generated preset file. Every interpolated field needs this, not just
+// `name` — this file becomes a static import in server.js, so an unescaped
+// quote anywhere would be a boot-crashing syntax error, not a soft failure.
+function jsStringLiteral(value) {
+    return `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+}
+
 function formatCompany(c) {
     const parts = [
-        `name: '${c.name.replace(/'/g, "\\'")}'`,
-        `domain: '${c.domain}'`,
-        `career_url: ${c.career_url ? `'${c.career_url}'` : 'null'}`,
-        `ats_type: '${c.ats_type}'`,
-        `ats_slug: ${c.ats_slug ? `'${c.ats_slug}'` : 'null'}`,
+        `name: ${jsStringLiteral(c.name)}`,
+        `domain: ${jsStringLiteral(c.domain)}`,
+        `career_url: ${c.career_url ? jsStringLiteral(c.career_url) : 'null'}`,
+        `ats_type: ${jsStringLiteral(c.ats_type)}`,
+        `ats_slug: ${c.ats_slug ? jsStringLiteral(c.ats_slug) : 'null'}`,
         `category: 'wdc-discovered'`,
     ];
     return `    { ${parts.join(', ')} }`;
@@ -121,7 +130,7 @@ async function main() {
         } catch (err) {
             console.log(`⚠️  [${checked}/${candidates.length}] ${domain} — ${err.message}`);
         }
-        await new Promise(r => setTimeout(r, DETECT_DELAY_MS));
+        await sleep(DETECT_DELAY_MS);
     }
 
     const body = discovered.map(formatCompany).join(',\n');
