@@ -13,6 +13,7 @@
 
 import { sleep } from './helpers.js';
 import { scrapeMarkdown, isEnabled as contextDevEnabled } from './context.js';
+import { parseJobPostings } from './schemaOrgJobPostings.js';
 
 const CAREER_PATH_CANDIDATES = [
     '/careers',
@@ -134,7 +135,11 @@ async function detectFromHTML(domain) {
                 }
             }
 
-            // Found a career page but no recognizable ATS signature.
+            // Found a career page but no recognizable ATS signature — check
+            // for schema.org JobPosting data before falling back to 'custom'.
+            if (parseJobPostings(searchText).length > 0) {
+                return { ats_type: 'schema-org', ats_slug: null, career_url: finalUrl };
+            }
             return { ats_type: 'custom', ats_slug: null, career_url: finalUrl };
         } catch { /* try next URL */ }
     }
@@ -173,7 +178,7 @@ export async function detectATS(name, domain) {
     // Fall back to HTML detection
     if (domain) {
         const result = await detectFromHTML(domain);
-        const supported = ['greenhouse', 'lever', 'ashby', 'workday', 'smartrecruiters', 'workable', 'recruitee'].includes(result.ats_type);
+        const supported = ['greenhouse', 'lever', 'ashby', 'workday', 'smartrecruiters', 'workable', 'recruitee', 'schema-org'].includes(result.ats_type);
         console.log(`🔍 "${name}" HTML detection → ${result.ats_type} (${result.career_url})`);
         return { ...result, supported: supported || result.ats_type === 'custom' };
     }
