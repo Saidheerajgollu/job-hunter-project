@@ -1,34 +1,30 @@
 # Job Hunter Pro
 
-A self-hosted job aggregator for tech roles. It collects listings from public APIs and ATS boards, stores them in Postgres, and gives you one dashboard to search, filter, and track applications.
+A self-hosted job aggregator for tech roles. It collects listings from public APIs, ATS boards, and schema.org structured data on company career pages, tracks which ones are still open, and gives you one dashboard to search, filter, and track applications.
 
-You apply on company sites yourself — this app finds the links and keeps them organized.
+You apply on company sites yourself — this app finds the links, keeps them fresh, and keeps them organized.
 
 ## What it does
 
-- **Aggregates jobs** from Greenhouse, Lever, Ashby, Workday, and other public feeds
+- **Aggregates jobs** from Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee, schema.org-embedded career pages, and other public feeds
+- **Polls fast** — the direct-ATS sources are checked every 15 minutes for every company, not just ones you're watching
+- **Detects closed listings** — a job that disappears from its source for two consecutive checks is marked closed and drops out of your feed, so you're not wasting time on dead links (jobs you've already saved or applied to stay visible with a "listing closed" badge instead of vanishing)
 - **Filters by role** — Software Eng, Frontend, Backend, Full Stack, AI, ML, Data Science, Data Engineer, Data Analyst, DevOps
 - **US-focused filtering** — prioritizes US-located roles; excludes citizenship-only postings
 - **Experience filters** — Any, 1yr, 2yr, 3yr, 4yr, 5+ yr (matched from job titles)
 - **Tracks applications** — save, apply, hide; notes per job
 - **Detects reposts** — flags jobs that reappear on a board with a new date
 - **Company watchlist** — monitor specific employers; get browser push alerts when new matching roles appear
-- **Regional presets** — bulk-import watchlists for Seattle, NYC/NJ, and Bay Area companies
+- **Regional presets** — bulk-import watchlists for Seattle, NYC/NJ, Bay Area companies, and companies discovered from Web Data Commons' schema.org job-posting dataset
 
 ## How it works
 
-```
-Job sources (APIs)  →  Node.js scrapers  →  Supabase Postgres  →  Next.js dashboard
-                              ↑
-                    Company watchlist (ATS polling + optional context.dev)
-```
-
-1. **Backend scrapers** fetch jobs from public JSON APIs and ATS endpoints (no browser automation).
-2. Jobs are **deduplicated by URL**, classified by title keywords, and stored in **Postgres**.
-3. A **cron scheduler** runs the main scrape hourly and the watchlist checker every 30 minutes.
-4. The **Next.js frontend** reads from the Express API — it never talks to the database or holds API keys.
-
-Optional scrapers (JSearch, Fantastic.jobs, Adzuna, context.dev) run only when their env vars are set.
+1. **Backend scrapers** fetch jobs from public JSON APIs, ATS endpoints, and schema.org structured data (no browser automation).
+2. The **7 direct-ATS sources** (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee) are polled every 15 minutes across every known company. A job missing from two consecutive polls is marked closed.
+3. **Free job boards and optional paid feeds** (JSearch, Fantastic.jobs, Adzuna, context.dev) run on their own hourly/12-hour schedule — they're excluded from closed-job detection since their listings are sampled, not complete.
+4. Jobs are **deduplicated by URL**, classified by title keywords, and stored in **Postgres**.
+5. The **company watchlist** checks every 30 minutes and pushes a browser notification the moment a watched company posts something new — including companies whose only structured data is schema.org markup, not a named ATS.
+6. The **Next.js frontend** reads from the Express API — it never talks to the database or holds API keys.
 
 ## Stack
 
@@ -37,6 +33,7 @@ Optional scrapers (JSearch, Fantastic.jobs, Adzuna, context.dev) run only when t
 | Backend | Node.js 20, Express |
 | Database | Supabase Postgres (`pg`) |
 | Scheduler | node-cron |
+| Testing | Vitest |
 | Frontend | Next.js 15, React 19, Tailwind CSS |
 | Notifications | Web Push (VAPID) |
 | Deploy | Vercel (frontend) · Railway (backend) · Supabase (database) |
@@ -73,7 +70,7 @@ npm install
 npm run dev
 ```
 
-Open **http://localhost:3000**. Use **Sync Now** to trigger a scrape, or wait for the hourly scheduler.
+Open **http://localhost:3000**. Use **Sync Now** to trigger a scrape, or wait for the scheduler.
 
 ## Environment variables
 
@@ -120,19 +117,21 @@ The frontend only needs the public backend URL — no database or scraper keys.
 ```
 backend/
   src/
-    server.js           Express REST API
-    db.js               Postgres data layer
-    scraper.js          Scraper orchestrator
-    scheduler.js        Cron jobs
-    scrapers/           One module per job source
-    watchers/           Company watchlist monitor
-    utils/              Filters, ATS detection, context.dev client, push
-    presets/            Regional company presets (Seattle, NYC, Bay Area)
+    server.js     Express REST API
+    db.js         Postgres data layer
+    scraper.js    Hourly scraper orchestrator (free boards, optional feeds)
+    fastPoll.js   15-minute poller for the 7 direct-ATS sources, with closed-listing detection
+    scheduler.js  Cron jobs
+    scrapers/     One module per job source
+    watchers/     Company watchlist monitor
+    utils/        Filters, ATS detection, schema.org parsing, staleness detection, WDC discovery, push
+    presets/      Regional and discovered company presets
+  scripts/        One-off maintenance scripts (watchlist repair, company discovery)
 frontend/
   src/
-    app/                Dashboard and settings pages
-    components/         Watchlist, notification bell
-    lib/api.ts          API client
+    app/          Dashboard and settings pages
+    components/   Watchlist, notification bell
+    lib/api.ts    API client
 ```
 
 ## Scripts
@@ -143,6 +142,12 @@ cd backend && npm run dev
 
 # Backend — one-off scrape
 cd backend && npm run scrape
+
+# Backend — run the test suite
+cd backend && npm test
+
+# Backend — discover new watchlist companies from Web Data Commons
+cd backend && node scripts/discover-companies-from-wdc.js
 
 # Frontend
 cd frontend && npm run dev
