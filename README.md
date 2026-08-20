@@ -23,7 +23,7 @@ You apply on company sites yourself — this app finds the links, keeps them fre
 2. The **7 direct-ATS sources** (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee) are polled every 15 minutes across every known company. A job missing from two consecutive polls is marked closed.
 3. **Free job boards and optional paid feeds** (JSearch, Fantastic.jobs, Adzuna) run on their own hourly/12-hour schedule — they're excluded from closed-job detection since their listings are sampled, not complete.
 4. Jobs are **deduplicated by URL**, classified by title keywords, and stored in **Postgres**.
-5. The **company watchlist** checks every 30 minutes and pushes a browser notification the moment a watched company posts something new — including companies whose only structured data is schema.org markup, not a named ATS.
+5. The **company watchlist** checks every 30 minutes and pushes a browser notification the moment a watched company posts something new — including companies whose only structured data is schema.org markup, not a named ATS. Companies with neither fall back to hash-diffing their career page, which flags that something changed without extracting individual job titles. Before each check, companies stuck in an error state (a moved career page, a renamed ATS slug) are automatically re-probed and repaired.
 6. The **Next.js frontend** reads from the Express API — it never talks to the database or holds API keys.
 
 ## Stack
@@ -147,6 +147,9 @@ cd backend && npm test
 
 # Backend — discover new watchlist companies from Web Data Commons
 cd backend && node scripts/discover-companies-from-wdc.js
+
+# Backend — re-probe and repair watched companies stuck in an error state
+cd backend && node scripts/repair-watchlist.js --errors-only
 
 # Frontend
 cd frontend && npm run dev
