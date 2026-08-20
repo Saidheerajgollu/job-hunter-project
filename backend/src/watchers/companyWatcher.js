@@ -25,10 +25,10 @@ import {
     getAllSettings,
 } from '../db.js';
 import { sendPushToAll } from '../utils/pushNotifications.js';
-import { makeJobId, classifyCategory, isSeniorRole, sleep, isEligibleJob } from '../utils/helpers.js';
+import { classifyCategory, isSeniorRole, sleep, isEligibleJob } from '../utils/helpers.js';
 import { matchesTechWatchRole } from '../utils/roleFilters.js';
 import { fetchAtsJobs, isSupportedAts, resolveEmbeddedAts } from './atsFetchers.js';
-import { scrapeMarkdown, extractStructured, isEnabled as contextDevEnabled } from '../utils/context.js';
+import { detectATS } from '../utils/atsDetector.js';
 
 // ── Role Matching ─────────────────────────────────────────────────────────────
 
@@ -40,153 +40,12 @@ function matchesWatchJob(job, watchRoles, filterSenior) {
     return isEligibleJob({ ...job, category });
 }
 
-// ── Custom page monitoring (last-resort when no ATS is found) ─────────────────
-
-// JSON Schema used for structured job extraction (10 credits via context.dev).
-const JOB_EXTRACTION_SCHEMA = {
-    type: 'object',
-    properties: {
-        jobs: {
-            type: 'array',
-            description: 'All open job postings found on this career page',
-            items: {
-                type: 'object',
-                properties: {
-                    title: { type: 'string', description: 'Exact job title as listed' },
-                    url: { type: 'string', description: 'Direct link to this specific job posting' },
-                    location: { type: 'string', description: 'City, state, country or Remote' },
-                    department: { type: 'string', description: 'Team or department name' },
-                },
-                required: ['title'],
-            },
-        },
-    },
-    required: ['jobs'],
-};
+// ── Custom page monitoring (last-resort when no ATS or schema.org data is found) ──
 
 /**
- * context.dev-powered custom page monitor.
- *
- * Step 1 (1 credit): scrape-markdown → hash for change detection.
- * Step 2 (10 credits, only on change): structured extraction → real job titles
- *   + URLs so notifications say "Software Engineer — Austin" not "page changed".
- *
- * Rate-limited to once per hour per company by the caller.
- */
-async function handleCustomExtract(company, filterSenior) {
-    if (!company.career_url) return;
-
-    // Step 1 — cheap scrape for hash comparison.
-    const { markdown } = await scrapeMarkdown(company.career_url, {
-        waitForMs: 2000,
-        useMainContentOnly: true,
-        timeoutMs: 35000,
-    });
-    const newHash = crypto.createHash('sha256').update(markdown).digest('hex');
-    const changed = !!company.last_job_hash && company.last_job_hash !== newHash;
-
-    if (!changed) {
-        await updateWatchedCompanyState({
-            last_job_hash: newHash,
-            last_job_ids: company.last_job_ids || '[]',
-            active_jobs_count: company.active_jobs_count || 0,
-            id: company.id,
-        });
-        return;
-    }
-
-    // Step 2 — page changed: extract actual job titles (10 credits).
-    console.log(`🔄 [${company.name}] custom page changed — extracting jobs (10 credits)`);
-    const watchRoles = company.watch_roles || null;
-
-    let extractedJobs = [];
-    try {
-        const { data } = await extractStructured(company.career_url, JOB_EXTRACTION_SCHEMA, {
-            maxPages: 5,
-            instructions: 'Extract all open tech job postings (software, data, ML, DevOps). Include every job found regardless of level — we will filter.',
-            stopAfterMs: 45000,
-        });
-        extractedJobs = data.jobs || [];
-    } catch (err) {
-        // Extraction failed — fall back to generic "page changed" alert.
-        console.warn(`⚠️  [${company.name}] extraction failed: ${err.message} — sending generic alert`);
-        await sendPushToAll({
-            title: `Career page updated — ${company.name}`,
-            body: 'New postings may have been added. Open their career page to check.',
-            url: company.career_url,
-            company: company.name,
-        });
-        await insertWatchNotification({ company_id: company.id, company_name: company.name, job_title: 'Career page update', job_url: company.career_url });
-        await incrementWatchNotifyCount(company.id);
-        await updateWatchedCompanyState({ last_job_hash: newHash, last_job_ids: '[]', active_jobs_count: 0, id: company.id });
-        return;
-    }
-
-    // Filter to matching roles (respects senior setting).
-    const matchingJobs = extractedJobs
-        .filter(j => j.title && matchesWatchJob({
-            title: j.title,
-            url: j.url || company.career_url,
-            location: j.location || 'United States',
-        }, watchRoles, filterSenior))
-        .map(j => ({
-            id: makeJobId(j.url || `${company.id}-${j.title}`),
-            title: j.title,
-            url: j.url || company.career_url,
-            location: j.location || 'United States',
-            source: 'watchlist',
-        }));
-
-    const sortedIds = matchingJobs.map(j => j.id).sort();
-    const previousIds = new Set(JSON.parse(company.last_job_ids || '[]'));
-    const newJobs = matchingJobs.filter(j => !previousIds.has(j.id));
-
-    // Persist new jobs into the main feed.
-    for (const job of newJobs) {
-        const category = classifyCategory(job.title);
-        if (!isEligibleJob({ ...job, category })) continue;
-        try {
-            await insertJob({ ...job, company: company.name, category, salary: null, description: null });
-        } catch { /* duplicate — fine */ }
-    }
-
-    // Send notifications, capped to avoid spam.
-    const toNotify = newJobs.slice(0, 5);
-    for (const job of toNotify) {
-        await sendPushToAll({
-            title: `New role at ${company.name}`,
-            body: `${job.title}${job.location ? ' — ' + job.location : ''}`,
-            url: job.url,
-            company: company.name,
-        });
-        await insertWatchNotification({ company_id: company.id, company_name: company.name, job_title: job.title, job_url: job.url });
-        await incrementWatchNotifyCount(company.id);
-    }
-
-    if (newJobs.length > 5) {
-        await sendPushToAll({
-            title: `${newJobs.length} new roles at ${company.name}`,
-            body: `Including: ${newJobs.slice(0, 3).map(j => j.title).join(', ')}…`,
-            url: company.career_url,
-            company: company.name,
-        });
-    }
-
-    await updateWatchedCompanyState({
-        last_job_hash: newHash,
-        last_job_ids: JSON.stringify(sortedIds),
-        active_jobs_count: matchingJobs.length,
-        id: company.id,
-    });
-
-    if (newJobs.length > 0) {
-        console.log(`🔔 [${company.name}]: ${newJobs.length} new jobs extracted via context.dev, ${toNotify.length} notifications sent`);
-    }
-}
-
-/**
- * Raw-HTML fallback for when context.dev is not configured.
- * Only tells you "something changed", not what — kept for backwards compat.
+ * Raw-HTML hash-diff monitor for genuinely custom career pages — no known ATS,
+ * no schema.org JobPosting markup, just a bespoke page. Only tells you "something
+ * changed", not what changed, since there's no structured data to parse.
  */
 async function handleCustomHash(company) {
     if (!company.career_url) return;
@@ -277,27 +136,74 @@ async function processAtsJobs(company, allJobs, watchRoles, filterSenior) {
 
 // ── Per-company entry ──────────────────────────────────────────────────────────
 
-const ONE_HOUR_MS = 60 * 60 * 1000;
+function isRecoverableAtsError(err) {
+    return /HTTP 404|HTTP 410|Unsupported ATS/i.test(err?.message || '');
+}
+
+async function redetectCompanyAts(company) {
+    const detected = await detectATS(company.name, company.domain);
+    if (detected.ats_type !== 'unknown' && isSupportedAts(detected.ats_type)) return detected;
+
+    if (company.career_url) {
+        const embedded = await resolveEmbeddedAts(company.career_url);
+        if (embedded?.ats_type) {
+            return {
+                ...embedded,
+                supported: isSupportedAts(embedded.ats_type),
+            };
+        }
+    }
+    return detected;
+}
+
+async function runAtsWatch(company, watchRoles, filterSenior) {
+    const jobs = await fetchAtsJobs(company);
+    return processAtsJobs(company, jobs, watchRoles, filterSenior);
+}
 
 async function watchOneCompany(company, filterSenior) {
     const watchRoles = company.watch_roles || null;
 
     // Direct ATS — the fast, reliable path (free API calls, run every cycle).
     if (isSupportedAts(company.ats_type)) {
-        const jobs = await fetchAtsJobs(company);
-        return processAtsJobs(company, jobs, watchRoles, filterSenior);
+        try {
+            return await runAtsWatch(company, watchRoles, filterSenior);
+        } catch (err) {
+            if (!isRecoverableAtsError(err)) throw err;
+
+            console.log(`🔧 [${company.name}] ${err.message} — re-detecting ATS...`);
+            const redetected = await redetectCompanyAts(company);
+
+            if (redetected?.supported && isSupportedAts(redetected.ats_type)) {
+                console.log(`✅ [${company.name}] upgraded to ${redetected.ats_type} (${redetected.ats_slug || 'embedded'})`);
+                await updateWatchedCompanyAts({
+                    ats_type: redetected.ats_type,
+                    ats_slug: redetected.ats_slug,
+                    career_url: redetected.career_url || company.career_url,
+                    id: company.id,
+                });
+                const upgraded = { ...company, ...redetected };
+                return runAtsWatch(upgraded, watchRoles, filterSenior);
+            }
+
+            if (redetected?.ats_type === 'custom' && redetected.career_url) {
+                console.log(`↪️  [${company.name}] falling back to custom page monitor`);
+                await updateWatchedCompanyAts({
+                    ats_type: 'custom',
+                    ats_slug: null,
+                    career_url: redetected.career_url,
+                    id: company.id,
+                });
+                company = { ...company, ats_type: 'custom', ats_slug: null, career_url: redetected.career_url };
+            } else {
+                throw err;
+            }
+        }
     }
 
-    // Custom / unknown — try to discover an embedded ATS first.
-    // On the very first check (last_job_hash is null), use context.dev scrape-markdown
-    // (1 credit) so JS-rendered ATS embeds are visible. On subsequent cycles use
-    // free raw fetch — we already know it's a truly custom page.
+    // Custom / unknown — try to discover an embedded ATS or schema.org data first.
     if (company.career_url) {
-        const isFirstCheck = !company.last_job_hash;
-        const discovered = await resolveEmbeddedAts(
-            company.career_url,
-            isFirstCheck && contextDevEnabled()
-        );
+        const discovered = await resolveEmbeddedAts(company.career_url);
         if (discovered && isSupportedAts(discovered.ats_type)) {
             console.log(`🔎 [${company.name}]: discovered ${discovered.ats_type} ATS — upgrading from custom`);
             await updateWatchedCompanyAts({ ...discovered, id: company.id });
@@ -307,18 +213,7 @@ async function watchOneCompany(company, filterSenior) {
         }
     }
 
-    // Last resort: custom page monitoring.
-    if (contextDevEnabled()) {
-        // Rate-limit context.dev calls to once per hour per company.
-        // The watcher runs every 30 min, so this prevents repeated credit burn.
-        const lastChecked = company.last_checked ? new Date(company.last_checked).getTime() : 0;
-        if (Date.now() - lastChecked < ONE_HOUR_MS) {
-            return; // Checked within the last hour — skip to conserve credits.
-        }
-        return handleCustomExtract(company, filterSenior);
-    }
-
-    // No context.dev configured: fall back to raw HTML hash-diff.
+    // Last resort: genuinely custom page, no structured data — hash-diff only.
     return handleCustomHash(company);
 }
 

@@ -10,7 +10,6 @@
  */
 
 import { makeJobId } from '../utils/helpers.js';
-import { scrapeMarkdown } from '../utils/context.js';
 import { parseJobPostings, formatJobLocation } from '../utils/schemaOrgJobPostings.js';
 
 const UA = 'Mozilla/5.0 (compatible; JobHunterPro/1.0)';
@@ -41,19 +40,27 @@ export function isSupportedAts(type) {
 // ── Individual fetchers ───────────────────────────────────────────────────────
 
 async function fetchGreenhouse(slug) {
-    const resp = await fetch(`https://boards-api.greenhouse.io/v1/boards/${slug}/jobs`, {
-        headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT),
-    });
-    if (!resp.ok) throw new Error(`Greenhouse HTTP ${resp.status}`);
-    const data = await resp.json();
-    return (data.jobs || []).map(j => ({
-        id: makeJobId(j.absolute_url || `gh-${slug}-${j.id}`),
-        title: j.title || '',
-        url: j.absolute_url || `https://boards.greenhouse.io/${slug}/jobs/${j.id}`,
-        location: j.location?.name || 'US',
-        posted_at: j.updated_at ? new Date(j.updated_at).toISOString() : new Date().toISOString(),
-        source: 'greenhouse',
-    }));
+    const slugs = [slug, slug.replace(/-/g, '')].filter((s, i, a) => s && a.indexOf(s) === i);
+    let lastStatus = 404;
+
+    for (const boardSlug of slugs) {
+        const resp = await fetch(`https://boards-api.greenhouse.io/v1/boards/${boardSlug}/jobs`, {
+            headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(TIMEOUT),
+        });
+        lastStatus = resp.status;
+        if (resp.status === 404) continue;
+        if (!resp.ok) throw new Error(`Greenhouse HTTP ${resp.status}`);
+        const data = await resp.json();
+        return (data.jobs || []).map(j => ({
+            id: makeJobId(j.absolute_url || `gh-${boardSlug}-${j.id}`),
+            title: j.title || '',
+            url: j.absolute_url || `https://boards.greenhouse.io/${boardSlug}/jobs/${j.id}`,
+            location: j.location?.name || 'US',
+            posted_at: j.updated_at ? new Date(j.updated_at).toISOString() : new Date().toISOString(),
+            source: 'greenhouse',
+        }));
+    }
+    throw new Error(`Greenhouse HTTP ${lastStatus}`);
 }
 
 async function fetchLever(slug) {
@@ -275,47 +282,31 @@ export async function fetchAtsJobs({ ats_type, ats_slug, career_url }) {
 }
 
 /**
- * Inspect a "custom" career page and try to discover the ATS powering it.
- * Many bespoke-looking career pages embed Greenhouse/Lever/Workday/etc.
- * Returns { ats_type, ats_slug, career_url } or null.
+ * Inspect a "custom" career page and try to discover the ATS (or schema.org
+ * JobPosting data) powering it. Many bespoke-looking career pages embed
+ * Greenhouse/Lever/Workday/etc. Returns { ats_type, ats_slug, career_url } or null.
  *
- * @param {string} careerUrl
- * @param {boolean} useContextDev  When true, use context.dev scrape-markdown
- *   (renders JS + iframes, finds embeds raw fetch misses). Pass true only on
- *   first-time company checks — it costs 1 credit per call.
+ * Raw fetch only — this misses ATS embeds that a career page injects via
+ * client-side JavaScript after mount (no JS-rendering available), but it
+ * catches everything server-rendered, which covers the large majority of
+ * career pages including most schema.org JSON-LD markup.
  */
-export async function resolveEmbeddedAts(careerUrl, useContextDev = false) {
+export async function resolveEmbeddedAts(careerUrl) {
     if (!careerUrl) return null;
 
     let haystack = '';
     let finalUrl = careerUrl;
 
-    if (useContextDev) {
-        try {
-            const { markdown, url } = await scrapeMarkdown(careerUrl, {
-                waitForMs: 2000,
-                includeFrames: true,
-                timeoutMs: 30000,
-            });
-            finalUrl = url || careerUrl;
-            haystack = `${finalUrl}\n${markdown}`;
-        } catch {
-            useContextDev = false; // fall through to raw fetch
-        }
-    }
-
-    if (!useContextDev) {
-        try {
-            const resp = await fetch(careerUrl, {
-                redirect: 'follow',
-                headers: { 'User-Agent': UA },
-                signal: AbortSignal.timeout(TIMEOUT),
-            });
-            finalUrl = resp.url || careerUrl;
-            haystack = `${finalUrl}\n${await resp.text()}`;
-        } catch {
-            return null;
-        }
+    try {
+        const resp = await fetch(careerUrl, {
+            redirect: 'follow',
+            headers: { 'User-Agent': UA },
+            signal: AbortSignal.timeout(TIMEOUT),
+        });
+        finalUrl = resp.url || careerUrl;
+        haystack = `${finalUrl}\n${await resp.text()}`;
+    } catch {
+        return null;
     }
 
     for (const { type, regex } of ATS_URL_PATTERNS) {

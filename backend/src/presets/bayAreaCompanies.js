@@ -68,7 +68,7 @@ export const BAY_AREA_COMPANIES = [
     { name: 'SoFi',                 domain: 'sofi.com',             career_url: 'https://sofi.com/careers',                      ats_type: 'greenhouse', ats_slug: 'sofi',               category: 'fintech' },
     { name: 'Affirm',               domain: 'affirm.com',           career_url: 'https://affirm.com/about/careers',              ats_type: 'greenhouse', ats_slug: 'affirm',             category: 'fintech' },
     { name: 'Carta',                domain: 'carta.com',            career_url: 'https://carta.com/company/careers',             ats_type: 'greenhouse', ats_slug: 'carta',              category: 'fintech' },
-    { name: 'Rippling',             domain: 'rippling.com',         career_url: 'https://rippling.com/company/careers',          ats_type: 'greenhouse', ats_slug: 'rippling',           category: 'fintech' },
+    { name: 'Rippling',             domain: 'rippling.com',         career_url: 'https://rippling.com/company/careers',          ats_type: 'custom',     ats_slug: null,                 category: 'fintech' },
     { name: 'Gusto',                domain: 'gusto.com',            career_url: 'https://gusto.com/company/jobs',                ats_type: 'greenhouse', ats_slug: 'gusto',              category: 'fintech' },
     { name: 'Marqeta',              domain: 'marqeta.com',          career_url: 'https://marqeta.com/company/careers',           ats_type: 'greenhouse', ats_slug: 'marqeta',            category: 'fintech' },
     { name: 'Ramp',                 domain: 'ramp.com',             career_url: 'https://ramp.com/careers',                      ats_type: 'ashby',      ats_slug: 'ramp',               category: 'fintech' },
@@ -113,11 +113,11 @@ export const BAY_AREA_COMPANIES = [
     { name: 'Tesla',                domain: 'tesla.com',            career_url: 'https://tesla.com/careers',                     ats_type: 'greenhouse', ats_slug: 'tesla',              category: 'deeptech' },
     { name: 'Waymo',                domain: 'waymo.com',            career_url: 'https://waymo.com/careers',                     ats_type: 'lever',      ats_slug: 'waymo',              category: 'deeptech' },
     { name: 'Cruise',               domain: 'getcruise.com',        career_url: 'https://getcruise.com/careers',                 ats_type: 'greenhouse', ats_slug: 'cruise',             category: 'deeptech' },
-    { name: 'Aurora Innovation',    domain: 'aurora.tech',          career_url: 'https://aurora.tech/careers',                   ats_type: 'greenhouse', ats_slug: 'aurora-innovation',  category: 'deeptech' },
-    { name: 'Joby Aviation',        domain: 'jobyaviation.com',     career_url: 'https://jobyaviation.com/careers',              ats_type: 'greenhouse', ats_slug: 'jobyaviation',       category: 'deeptech' },
-    { name: 'Planet Labs',          domain: 'planet.com',           career_url: 'https://planet.com/careers',                    ats_type: 'greenhouse', ats_slug: 'planet-labs',        category: 'deeptech' },
+    { name: 'Aurora Innovation',    domain: 'aurora.tech',          career_url: 'https://aurora.tech/careers',                   ats_type: 'greenhouse', ats_slug: 'aurorainnovation',   category: 'deeptech' },
+    { name: 'Joby Aviation',        domain: 'jobyaviation.com',     career_url: 'https://jobyaviation.com/careers',              ats_type: 'custom',     ats_slug: null,                 category: 'deeptech' },
+    { name: 'Planet Labs',          domain: 'planet.com',           career_url: 'https://planet.com/careers',                    ats_type: 'greenhouse', ats_slug: 'planetlabs',         category: 'deeptech' },
     { name: 'Helion Energy',        domain: 'helionenergy.com',     career_url: 'https://helionenergy.com/careers',              ats_type: 'greenhouse', ats_slug: 'helion',             category: 'deeptech' },
-    { name: 'Impossible Foods',     domain: 'impossible.com',       career_url: 'https://impossible.com/pages/careers',          ats_type: 'greenhouse', ats_slug: 'impossible-foods',   category: 'deeptech' },
+    { name: 'Impossible Foods',     domain: 'impossible.com',       career_url: 'https://impossible.com/pages/careers',          ats_type: 'custom',     ats_slug: null,                 category: 'deeptech' },
 ];
 
 export const BAY_AREA_PRESET = {

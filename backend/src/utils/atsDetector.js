@@ -12,7 +12,6 @@
  */
 
 import { sleep } from './helpers.js';
-import { scrapeMarkdown, isEnabled as contextDevEnabled } from './context.js';
 import { parseJobPostings } from './schemaOrgJobPostings.js';
 
 const CAREER_PATH_CANDIDATES = [
@@ -55,6 +54,11 @@ function slugVariants(name, domain) {
     variants.add(clean.replace(/\s+/g, '_'));
     variants.add(clean.replace(/\s*&\s*/g, '-'));
     variants.add(clean.replace(/\s*&\s*/g, ''));
+
+    // Also try compact forms of hyphenated slugs (e.g. aurora-innovation → aurorainnovation).
+    for (const v of [...variants]) {
+        if (v.includes('-')) variants.add(v.replace(/-/g, ''));
+    }
 
     return [...variants].filter(s => s.length >= 2);
 }
@@ -104,29 +108,16 @@ async function detectFromHTML(domain) {
 
     for (const url of urlsToTry) {
         try {
-            let searchText = '';
-            let finalUrl = url;
-
-            if (contextDevEnabled()) {
-                // context.dev scrape: renders JS and exposes embedded iframes —
-                // catches Greenhouse/Lever embeds that only appear after JS mounts.
-                const { markdown } = await scrapeMarkdown(url, {
-                    waitForMs: 2000,
-                    includeFrames: true,
-                    timeoutMs: 30000,
-                });
-                searchText = url + '\n' + markdown;
-            } else {
-                // Raw fetch fallback — misses JS-rendered content.
-                const resp = await fetch(url, {
-                    redirect: 'follow',
-                    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)' },
-                    signal: AbortSignal.timeout(10000),
-                });
-                if (!resp.ok) continue;
-                finalUrl = resp.url;
-                searchText = finalUrl + '\n' + await resp.text();
-            }
+            // Raw fetch only — misses ATS embeds injected via client-side JS
+            // after mount, but catches everything server-rendered.
+            const resp = await fetch(url, {
+                redirect: 'follow',
+                headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)' },
+                signal: AbortSignal.timeout(10000),
+            });
+            if (!resp.ok) continue;
+            const finalUrl = resp.url;
+            const searchText = finalUrl + '\n' + await resp.text();
 
             for (const { type, regex } of ATS_HTML_PATTERNS) {
                 const match = searchText.match(regex);

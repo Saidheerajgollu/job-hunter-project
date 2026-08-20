@@ -3,7 +3,7 @@
  *
  * Independent loops:
  *   1. Main scraper   — Greenhouse / Lever / Ashby / Workday / SimplifyJobs /
- *                       The Muse / Jobicy + context.dev scrapers.
+ *                       The Muse / Jobicy.
  *                       Runs immediately on boot, then every hour.
  *   2. Company watcher — diffs each watched company's ATS board, fires push alerts.
  *                       Runs every 30 minutes.
@@ -11,16 +11,12 @@
  *                       Only runs if RAPIDAPI_KEY is set. Every 12 hours.
  *   4. Fantastic.jobs — broad ATS-board feed via RapidAPI.
  *                       Only runs if FANTASTIC_API_KEY is set. Every 12 hours.
- *   5. BigTech        — Google/Meta/Amazon/Microsoft/Apple/IBM/Oracle/SAP/ByteDance
- *                       via context.dev web search. Daily at 8 AM UTC.
- *                       Cost: ~180 credits/day.
  */
 
 import cron from 'node-cron';
 import { runScraper } from './scraper.js';
 import { scrapeJSearch } from './scrapers/jsearch.js';
 import { scrapeFantasticJobs } from './scrapers/fantasticJobs.js';
-import { scrapeBigTech } from './scrapers/bigtech.js';
 import { runCompanyWatcher } from './watchers/companyWatcher.js';
 import { runFastAtsPoll } from './fastPoll.js';
 import { insertJob, getAllSettings } from './db.js';
@@ -30,7 +26,6 @@ let isRunning = false;
 let isJSearchRunning = false;
 let isFantasticRunning = false;
 let isWatcherRunning = false;
-let isBigTechRunning = false;
 let isFastPollRunning = false;
 
 export function startScheduler() {
@@ -63,16 +58,6 @@ export function startScheduler() {
     if (process.env.FANTASTIC_API_KEY && process.env.FANTASTIC_API_KEY !== 'your_fantastic_key_here') {
         setTimeout(() => runFantasticSafe(), 15 * 60 * 1000);
         cron.schedule('0 2,14 * * *', () => runFantasticSafe());
-    }
-
-    // BigTech (Google/Meta/Amazon/Microsoft/Apple) via context.dev web search.
-    // First run 5 min after boot, then daily at 8 AM UTC.
-    // The main scraper also calls scrapeBigTech on every hourly run if the key is set,
-    // but this dedicated daily slot ensures FAANG coverage even if the hourly scraper
-    // is already loaded with many companies and skips a few.
-    if (process.env.CONTEXT_DEV_API_KEY) {
-        setTimeout(() => runBigTechSafe(), 5 * 60 * 1000);
-        cron.schedule('0 8 * * *', () => runBigTechSafe());
     }
 }
 
@@ -160,36 +145,6 @@ async function runWatcherSafe() {
         console.error('💥 Company watcher error:', err);
     } finally {
         isWatcherRunning = false;
-    }
-}
-
-async function runBigTechSafe() {
-    if (isBigTechRunning) {
-        console.log('⚠️  BigTech scraper already running, skipping');
-        return;
-    }
-    isBigTechRunning = true;
-    try {
-        const settings = await getAllSettings();
-        const filterSenior = settings.filter_exclude_senior !== 'false';
-
-        console.log('\n🏢 BigTech — scraping Google/Meta/Amazon/Microsoft/Apple via context.dev');
-        const jobs = await scrapeBigTech(filterSenior);
-
-        let saved = 0;
-        for (const job of jobs) {
-            if (!isEligibleJob(job)) continue;
-            try {
-                if (await insertJob(job)) saved++;
-            } catch (err) {
-                console.error(`DB insert error: ${err.message}`);
-            }
-        }
-        console.log(`✅ BigTech complete: ${jobs.length} found, ${saved} new`);
-    } catch (err) {
-        console.error('💥 BigTech scraper error:', err);
-    } finally {
-        isBigTechRunning = false;
     }
 }
 

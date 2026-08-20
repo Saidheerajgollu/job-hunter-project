@@ -148,45 +148,85 @@ export function classifyCategory(title, description = '') {
 }
 
 
+/** Countries/regions/cities that indicate a non-US job (word-boundary matched). */
+export const NON_US_LOCATION_TERMS = [
+    // Regions
+    'europe', 'european', 'emea', 'apac', 'latam', 'mena', 'africa', 'middle east', 'asia pacific',
+    'eu only', 'eu-only', 'uk only', 'uk-only', 'canada only', 'canada-only', 'india only', 'india-only',
+    'remote in uk', 'remote in europe', 'remote in india', 'remote in canada',
+    // UK
+    'united kingdom', 'great britain', 'england', 'scotland', 'wales', 'cambridgeshire',
+    'london', 'manchester', 'edinburgh', 'glasgow', 'bristol', 'leeds', 'cardiff', 'birmingham',
+    // Europe
+    'switzerland', 'zurich', 'geneva', 'italy', 'milan', 'rome', 'florence', 'turin',
+    'germany', 'berlin', 'munich', 'frankfurt', 'hamburg', 'france', 'paris', 'lyon',
+    'netherlands', 'amsterdam', 'rotterdam', 'spain', 'madrid', 'barcelona', 'portugal', 'lisbon',
+    'ireland', 'dublin', 'belgium', 'brussels', 'austria', 'vienna', 'sweden', 'stockholm',
+    'norway', 'oslo', 'denmark', 'copenhagen', 'finland', 'helsinki', 'poland', 'warsaw', 'krakow', 'kraków',
+    'czech', 'prague', 'romania', 'bucharest', 'hungary', 'budapest', 'greece', 'athens',
+    'ukraine', 'kyiv', 'kiev', 'russia', 'moscow',
+    // Americas (non-US)
+    'canada', 'toronto', 'vancouver', 'montreal', 'ottawa', 'calgary',
+    'mexico', 'brazil', 'sao paulo', 'são paulo', 'argentina', 'buenos aires', 'chile', 'santiago',
+    'colombia', 'bogota', 'bogotá', 'peru', 'lima', 'costa rica',
+    // Asia-Pacific
+    'india', 'mumbai', 'delhi', 'bangalore', 'bengaluru', 'hyderabad', 'chennai', 'pune',
+    'gurgaon', 'gurugram', 'noida', 'kolkata', 'ahmedabad', 'jaipur',
+    'china', 'beijing', 'shanghai', 'shenzhen', 'guangzhou',
+    'japan', 'tokyo', 'osaka', 'south korea', 'seoul', 'singapore', 'hong kong',
+    'taiwan', 'taipei', 'australia', 'sydney', 'melbourne', 'brisbane', 'new zealand', 'auckland',
+    'philippines', 'manila', 'vietnam', 'ho chi minh', 'hanoi', 'thailand', 'bangkok',
+    'indonesia', 'jakarta', 'malaysia', 'kuala lumpur', 'pakistan', 'karachi', 'lahore',
+    'bangladesh', 'dhaka', 'sri lanka', 'nepal',
+    // Middle East / Africa
+    'israel', 'tel aviv', 'uae', 'dubai', 'abu dhabi', 'saudi arabia', 'riyadh', 'qatar', 'doha',
+    'egypt', 'cairo', 'nigeria', 'lagos', 'kenya', 'nairobi', 'south africa', 'johannesburg', 'cape town',
+];
+
+const US_STATE_ABBREVS = 'AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC';
+
+let _nonUsRegex = null;
+function nonUsLocationRegex() {
+    if (!_nonUsRegex) {
+        const escaped = NON_US_LOCATION_TERMS.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+        _nonUsRegex = new RegExp(`\\b(${escaped})\\b`, 'i');
+    }
+    return _nonUsRegex;
+}
+
+/** PostgreSQL regex for buildJobQueryFilters (word boundaries). */
+export function getNonUsLocationPgRegex() {
+    const escaped = NON_US_LOCATION_TERMS.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    return `\\m(${escaped})\\M`;
+}
+
+function hasUsStateSignal(location = '') {
+    return new RegExp(`(,|\\||\\-)\\s*(${US_STATE_ABBREVS})\\s*($|,|\\||\\-)`, 'i').test(location);
+}
+
 /**
  * Returns true if the location string is US-compatible.
  * US **location** only — does not require US citizenship (F-1 / OPT friendly).
- * Accepts: US cities/states, "Remote", blank, "United States".
- * Rejects: UK, Europe, Canada-only, etc.
  */
 export function isUSCompatible(location = '') {
     if (!location) return true;
 
     const loc = location.toLowerCase().trim();
 
-    // Explicit US signals — always accept
     if (/\b(united states|u\.s\.a?\.?|usa)\b/.test(loc)) return true;
     if (/\b(remote.*\b(us|usa|united states)\b|\b(us|usa|united states)\b.*remote)\b/.test(loc)) return true;
+    if (hasUsStateSignal(location)) return true;
 
-    // UK — explicit patterns first
-    if (/\b(united kingdom|u\.k\.|great britain)\b/.test(loc)) return false;
-    if (/\bremote in uk\b/.test(loc)) return false;
-    if (/(^|[|,])\s*uk\s*($|[|,])/.test(loc)) return false;
-    if (/\b(london|manchester|edinburgh|glasgow|bristol|leeds|cardiff|birmingham|newcastle upon tyne|slough|cambridge),?\s*uk\b/.test(loc)) return false;
-    if (/\buk only\b/.test(loc)) return false;
+    if (nonUsLocationRegex().test(loc)) return false;
 
-    // International cities that often slip through without country suffix
-    if (/\b(warsaw|berlin|munich|frankfurt|hamburg|krakow|kraków|paris|amsterdam|zurich|stockholm|tokyo|beijing|shanghai|hyderabad|bangalore|bengaluru|seoul|taipei)\b/.test(loc)) return false;
-    if (/\blondon\b/.test(loc) && !/\b(london,?\s*(ky|oh|on\b)|united states|, us\b| usa\b)/.test(loc)) return false;
-
-    const nonUS = [
-        'europe', 'european', 'eu only', 'eu-only', ' emea',
-        'cambridgeshire',
-        'canada only', 'canada-only', ', canada', ' toronto,', 'vancouver,', 'montreal,',
-        'australia', 'new zealand', 'sydney,', 'melbourne,',
-        'asia', 'apac', 'india only', 'india-only',
-        'latin america', 'latam',
-        'germany', 'france', 'netherlands', 'spain', 'portugal',
-        'ireland', 'dublin,',
-        'brazil', 'mexico city',
-        'africa', 'middle east', 'singapore',
+    // Legacy substring patterns (multi-word phrases with punctuation)
+    const nonUSPhrases = [
+        ', canada', ' toronto,', 'vancouver,', 'montreal,',
+        'sydney,', 'melbourne,', 'mexico city',
     ];
-    if (nonUS.some(r => loc.includes(r))) return false;
+    if (nonUSPhrases.some(r => loc.includes(r))) return false;
+
+    if (/\blondon\b/.test(loc) && !/\b(london,?\s*(ky|oh|on\b)|united states|, us\b| usa\b)/.test(loc)) return false;
 
     return true;
 }

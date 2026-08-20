@@ -21,7 +21,7 @@ You apply on company sites yourself — this app finds the links, keeps them fre
 
 1. **Backend scrapers** fetch jobs from public JSON APIs, ATS endpoints, and schema.org structured data (no browser automation).
 2. The **7 direct-ATS sources** (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee) are polled every 15 minutes across every known company. A job missing from two consecutive polls is marked closed.
-3. **Free job boards and optional paid feeds** (JSearch, Fantastic.jobs, Adzuna, context.dev) run on their own hourly/12-hour schedule — they're excluded from closed-job detection since their listings are sampled, not complete.
+3. **Free job boards and optional paid feeds** (JSearch, Fantastic.jobs, Adzuna) run on their own hourly/12-hour schedule — they're excluded from closed-job detection since their listings are sampled, not complete.
 4. Jobs are **deduplicated by URL**, classified by title keywords, and stored in **Postgres**.
 5. The **company watchlist** checks every 30 minutes and pushes a browser notification the moment a watched company posts something new — including companies whose only structured data is schema.org markup, not a named ATS.
 6. The **Next.js frontend** reads from the Express API — it never talks to the database or holds API keys.
@@ -81,7 +81,6 @@ Open **http://localhost:3000**. Use **Sync Now** to trigger a scrape, or wait fo
 | `DATABASE_URL` | Yes | Supabase Postgres connection URI |
 | `ALLOWED_ORIGIN` | Production | Vercel frontend URL for CORS |
 | `PUSH_CONTACT_EMAIL` | For push | Email used in Web Push VAPID headers |
-| `CONTEXT_DEV_API_KEY` | No | [context.dev](https://context.dev) — BigTech search, platform discovery, custom career pages |
 | `RAPIDAPI_KEY` | No | JSearch (LinkedIn/Indeed/Glassdoor), every 12h |
 | `FANTASTIC_API_KEY` | No | Fantastic.jobs Active Jobs DB, every 12h |
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | No | Adzuna job search |

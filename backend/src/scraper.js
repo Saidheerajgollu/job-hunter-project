@@ -15,11 +15,8 @@ import { scrapeHimalayas } from './scrapers/himalayas.js';
 import { scrapeWeWorkRemotely } from './scrapers/weworkremotely.js';
 import { scrapeTheMuse } from './scrapers/themuse.js';
 import { scrapeJobicy } from './scrapers/jobicy.js';
-import { scrapeBigTech } from './scrapers/bigtech.js';
-import { scrapePlatformSearch } from './scrapers/platformSearch.js';
 import { insertJob, startScrapeRun, finishScrapeRun, getAllSettings } from './db.js';
 import { isEligibleJob } from './utils/helpers.js';
-import { isEnabled as contextDevEnabled } from './utils/context.js';
 
 
 export async function runScraper() {
@@ -49,11 +46,6 @@ export async function runScraper() {
         { name: 'WeWorkRemotely',   fn: () => scrapeWeWorkRemotely(filterSenior) },
         { name: 'The Muse',         fn: () => scrapeTheMuse(filterSenior) },
         { name: 'Jobicy',           fn: () => scrapeJobicy(filterSenior) },
-        // ── context.dev scrapers (only when CONTEXT_DEV_API_KEY is set) ─────────
-        ...(contextDevEnabled() ? [
-            { name: 'BigTech (context.dev)',            fn: () => scrapeBigTech(filterSenior) },
-            { name: 'Platform Discovery (context.dev)', fn: () => scrapePlatformSearch(filterSenior) },
-        ] : []),
     ];
 
     // Each scraper runs independently and saves its own results the moment it

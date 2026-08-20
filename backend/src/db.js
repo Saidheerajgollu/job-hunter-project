@@ -11,7 +11,7 @@
 
 import 'dotenv/config';
 import pg from 'pg';
-import { buildJobQueryFilters } from './utils/roleFilters.js';
+import { buildJobQueryFilters, PORTAL_DATE_SQL } from './utils/roleFilters.js';
 import { computeStaleUpdates } from './utils/staleness.js';
 
 const { Pool } = pg;
@@ -317,7 +317,7 @@ const JOB_COLUMNS = `
   posted_at, previous_posted_at, reposted_at, scraped_at, applied_at, status, closed_at,
   is_new::int AS is_new,
   is_reposted::int AS is_reposted,
-  (CASE WHEN scraped_at >= now() - interval '24 hours' THEN 1 ELSE 0 END) AS is_fresh
+  (CASE WHEN ${PORTAL_DATE_SQL} >= now() - interval '24 hours' THEN 1 ELSE 0 END) AS is_fresh
 `;
 
 export async function getJobs(filters) {
@@ -330,7 +330,7 @@ export async function getJobs(filters) {
         `SELECT ${JOB_COLUMNS}
          FROM jobs
          WHERE ${where}
-         ORDER BY scraped_at DESC, posted_at DESC NULLS LAST
+         ORDER BY ${PORTAL_DATE_SQL} DESC NULLS LAST
          LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
         params
     );
@@ -382,7 +382,7 @@ export async function getStats() {
         COALESCE(SUM(CASE WHEN status = 'applied' THEN 1 ELSE 0 END), 0)::int AS applied,
         COALESCE(SUM(CASE WHEN status = 'saved' THEN 1 ELSE 0 END), 0)::int AS saved,
         COALESCE(SUM(CASE WHEN status = 'ignored' THEN 1 ELSE 0 END), 0)::int AS ignored,
-        COALESCE(SUM(CASE WHEN scraped_at >= now() - interval '24 hours' THEN 1 ELSE 0 END), 0)::int AS last_24h
+        COALESCE(SUM(CASE WHEN ${PORTAL_DATE_SQL} >= now() - interval '24 hours' THEN 1 ELSE 0 END), 0)::int AS last_24h
       FROM jobs
     `);
     return res.rows[0];
@@ -483,7 +483,8 @@ export async function updateWatchedCompanyState({ last_job_hash, last_job_ids, a
 export async function updateWatchedCompanyAts({ ats_type, ats_slug, career_url, id }) {
     await pool.query(
         `UPDATE watched_companies
-         SET ats_type = $1, ats_slug = $2, career_url = COALESCE($3, career_url)
+         SET ats_type = $1, ats_slug = $2, career_url = COALESCE($3, career_url),
+             status = 'active', error_msg = NULL
          WHERE id = $4`,
         [ats_type, ats_slug ?? null, career_url ?? null, id]
     );

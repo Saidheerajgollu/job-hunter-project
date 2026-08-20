@@ -22,8 +22,13 @@ import { SEATTLE_PRESET } from './presets/seattleCompanies.js';
 import { NYC_PRESET } from './presets/nycCompanies.js';
 import { BAY_AREA_PRESET } from './presets/bayAreaCompanies.js';
 import { WDC_DISCOVERED_PRESET } from './presets/wdcDiscoveredCompanies.js';
+import { applyAtsOverrides } from './presets/atsOverrides.js';
+import { repairWatchlist } from './watchers/repairWatchlist.js';
 
-const ALL_PRESETS = [SEATTLE_PRESET, NYC_PRESET, BAY_AREA_PRESET, WDC_DISCOVERED_PRESET];
+const ALL_PRESETS = [SEATTLE_PRESET, NYC_PRESET, BAY_AREA_PRESET, WDC_DISCOVERED_PRESET].map(p => ({
+    ...p,
+    companies: applyAtsOverrides(p.companies),
+}));
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -230,8 +235,18 @@ app.post('/api/companies/bulk', wrap(async (req, res) => {
 
 // Manually trigger watchlist check (runs in background)
 app.post('/api/companies/watch/run', wrap(async (_req, res) => {
-    triggerWatcher();
+    // Fix any stale 404 slugs before checking jobs.
+    repairWatchlist({ onlyErrors: true })
+        .catch(err => console.error('Watchlist repair failed:', err.message))
+        .finally(() => triggerWatcher());
     res.json({ ok: true, message: 'Watchlist check started' });
+}));
+
+// Re-probe ATS slugs and fix 404s (runs synchronously — may take ~1 min for 180 companies)
+app.post('/api/companies/repair', wrap(async (req, res) => {
+    const onlyErrors = req.body?.only_errors === true;
+    const result = await repairWatchlist({ onlyErrors });
+    res.json({ ok: true, ...result });
 }));
 
 // ── Push Notifications ────────────────────────────────────────────────────────
@@ -279,12 +294,14 @@ app.get('/api/health', (_req, res) => {
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+    // Listen immediately so Railway healthchecks pass while DB initializes.
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`\n🎯 Job Hunter Pro API running on port ${PORT}`);
+    });
+
     await initDb();
     await initPush();
-    app.listen(PORT, () => {
-        console.log(`\n🎯 Job Hunter Pro API running at http://localhost:${PORT}`);
-        startScheduler();
-    });
+    startScheduler();
 }
 
 main().catch((err) => {

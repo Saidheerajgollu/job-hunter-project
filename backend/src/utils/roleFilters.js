@@ -2,6 +2,11 @@
  * Role chip → title/description keyword patterns.
  * Matching is substring (ILIKE) so "Senior Software Engineer - Infra" matches Software Eng.
  */
+import { getNonUsLocationPgRegex } from './helpers.js';
+
+/** Best estimate of when the role was posted/reposted on the company portal. */
+export const PORTAL_DATE_SQL = 'COALESCE(reposted_at, posted_at, scraped_at)';
+
 export const ROLE_TITLE_KEYWORDS = {
     swe: [
         'software engineer',
@@ -161,43 +166,6 @@ export const EXPERIENCE_KEYWORDS = {
     ],
 };
 
-/** Location substrings that indicate non-US — used in SQL ILIKE NOT filters. */
-export const NON_US_LOCATION_PATTERNS = [
-    '%united kingdom%',
-    '%great britain%',
-    '%remote in uk%',
-    '%uk only%',
-    '%, uk%',
-    '%| uk%',
-    '%canada only%',
-    '%canada-only%',
-    '%, canada%',
-    '%toronto%',
-    '%vancouver%',
-    '%montreal%',
-    '%germany%',
-    '%france%',
-    '%netherlands%',
-    '%ireland%',
-    '%dublin%',
-    '%india only%',
-    '%india-only%',
-    '%singapore%',
-    '%australia%',
-    '%europe%',
-    '%european%',
-    '%emea%',
-    '%apac%',
-    '%latam%',
-    '%brazil%',
-    '%mexico city%',
-    '%warsaw%',
-    '%berlin%',
-    '%munich%',
-    '%krakow%',
-    '%kraków%',
-];
-
 /** Hide US-citizenship-only jobs (F-1 can still see roles that don't sponsor). */
 export const CITIZENSHIP_BLOCKED_PATTERNS = [
     '%us citizen%',
@@ -295,7 +263,7 @@ export function buildJobQueryFilters({
     }
 
     if (fresh_only) {
-        conditions.push(`scraped_at >= now() - interval '24 hours'`);
+        conditions.push(`${PORTAL_DATE_SQL} >= now() - interval '24 hours'`);
     }
 
     if (has_salary) {
@@ -304,7 +272,7 @@ export function buildJobQueryFilters({
 
     if (max_age_days > 0) {
         params.push(max_age_days);
-        conditions.push(`scraped_at >= now() - make_interval(days => $${params.length}::int)`);
+        conditions.push(`${PORTAL_DATE_SQL} >= now() - make_interval(days => $${params.length}::int)`);
     }
 
     if (experience && EXPERIENCE_KEYWORDS[experience]) {
@@ -312,10 +280,8 @@ export function buildJobQueryFilters({
     }
 
     if (us_only) {
-        for (const pattern of NON_US_LOCATION_PATTERNS) {
-            params.push(pattern);
-            conditions.push(`COALESCE(location, '') NOT ILIKE $${params.length}`);
-        }
+        params.push(getNonUsLocationPgRegex());
+        conditions.push(`COALESCE(location, '') !~* $${params.length}`);
         // Exclude US-citizenship-only roles from title + description
         for (const pattern of CITIZENSHIP_BLOCKED_PATTERNS) {
             params.push(pattern);
