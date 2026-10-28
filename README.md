@@ -1,163 +1,102 @@
 # Job Hunter Pro
 
-A self-hosted job aggregator for tech roles. It collects listings from public APIs, ATS boards, and schema.org structured data on company career pages, tracks which ones are still open, and gives you one dashboard to search, filter, and track applications.
+A self-hosted job aggregator for US tech roles. It pulls listings from company job boards and public job sites into one dashboard where you can filter, save, and track applications. You still apply on the company's site.
 
-You apply on company sites yourself — this app finds the links, keeps them fresh, and keeps them organized.
+## Job sources
 
-## What it does
+- **Company ATS boards** (every 15 min): Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee. Companies come from a seed list plus the ATS links found in SimplifyJobs listings.
+- **Job sites** (hourly): SimplifyJobs, Himalayas, RemoteOK, Remotive, We Work Remotely, The Muse, Jobicy, Hacker News "Who is hiring?"
+- **Optional, needs API keys** (every 12h): JSearch, Fantastic.jobs, Adzuna
 
-- **Aggregates jobs** from Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee, schema.org-embedded career pages, and other public feeds
-- **Polls fast** — the direct-ATS sources are checked every 15 minutes for every company, not just ones you're watching
-- **Detects closed listings** — a job that disappears from its source for two consecutive checks is marked closed and drops out of your feed, so you're not wasting time on dead links (jobs you've already saved or applied to stay visible with a "listing closed" badge instead of vanishing)
-- **Filters by role** — Software Eng, Frontend, Backend, Full Stack, AI, ML, Data Science, Data Engineer, Data Analyst, DevOps
-- **US-focused filtering** — prioritizes US-located roles; excludes citizenship-only postings
-- **Experience filters** — Any, 1yr, 2yr, 3yr, 4yr, 5+ yr (matched from job titles)
-- **Tracks applications** — save, apply, hide; notes per job
-- **Detects reposts** — flags jobs that reappear on a board with a new date
-- **Company watchlist** — monitor specific employers; get browser push alerts when new matching roles appear
-- **Regional presets** — bulk-import watchlists for Seattle, NYC/NJ, Bay Area companies, and companies discovered from Web Data Commons' schema.org job-posting dataset
+## Features
 
-## How it works
-
-1. **Backend scrapers** fetch jobs from public JSON APIs, ATS endpoints, and schema.org structured data (no browser automation).
-2. The **7 direct-ATS sources** (Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee) are polled every 15 minutes across every known company. A job missing from two consecutive polls is marked closed.
-3. **Free job boards and optional paid feeds** (JSearch, Fantastic.jobs, Adzuna) run on their own hourly/12-hour schedule — they're excluded from closed-job detection since their listings are sampled, not complete.
-4. Jobs are **deduplicated by URL**, classified by title keywords, and stored in **Postgres**.
-5. The **company watchlist** checks every 30 minutes and pushes a browser notification the moment a watched company posts something new — including companies whose only structured data is schema.org markup, not a named ATS. Companies with neither fall back to hash-diffing their career page, which flags that something changed without extracting individual job titles. Before each check, companies stuck in an error state (a moved career page, a renamed ATS slug) are automatically re-probed and repaired.
-6. The **Next.js frontend** reads from the Express API — it never talks to the database or holds API keys.
+- Filter by role (SWE, frontend, backend, full stack, AI, ML, data, DevOps), experience, and posting age
+- US locations only; skips roles that require US citizenship
+- Jobs that disappear from an ATS board for two checks are marked closed
+- Flags reposted jobs
+- Save / applied / hidden status and notes per job
+- Company watchlist with browser push alerts for new roles
 
 ## Stack
 
-| Layer | Technology |
-|---|---|
-| Backend | Node.js 20, Express |
-| Database | Supabase Postgres (`pg`) |
-| Scheduler | node-cron |
-| Testing | Vitest |
-| Frontend | Next.js 15, React 19, Tailwind CSS |
-| Notifications | Web Push (VAPID) |
-| Deploy | Vercel (frontend) · Railway (backend) · Supabase (database) |
+Node.js 20 + Express, Postgres (Supabase), node-cron, Vitest · Next.js 15 + React 19 + Tailwind · deployed on Railway, Vercel, Supabase
 
-## Quick start
+## Setup
 
-### Prerequisites
+You need Node.js 20+ and a Postgres database (a free Supabase project works).
 
-- Node.js 20+
-- A [Supabase](https://supabase.com) project (free tier works)
-
-### 1. Database
-
-In Supabase: **Project Settings → Database → Connection string → URI**. Copy the connection string.
-
-### 2. Backend
+Backend:
 
 ```bash
 cd backend
-cp .env.example .env
-# Set DATABASE_URL in .env
+cp .env.example .env   # set DATABASE_URL
 npm install
-npm run dev
+npm run dev            # http://localhost:4000, tables are created on first start
 ```
 
-The API runs at `http://localhost:4000`. Tables are created on first boot.
-
-### 3. Frontend
+Frontend:
 
 ```bash
 cd frontend
 cp .env.local.example .env.local
 npm install
-npm run dev
+npm run dev            # http://localhost:3000
 ```
 
-Open **http://localhost:3000**. Use **Sync Now** to trigger a scrape, or wait for the scheduler.
+Click **Sync Now** in the dashboard to run a scrape, or wait for the scheduler.
 
 ## Environment variables
 
-### Backend (`backend/.env`)
+Backend (`backend/.env`):
 
-| Variable | Required | Description |
+| Variable | Required | Purpose |
 |---|---|---|
-| `DATABASE_URL` | Yes | Supabase Postgres connection URI |
-| `ALLOWED_ORIGIN` | Production | Vercel frontend URL for CORS |
-| `PUSH_CONTACT_EMAIL` | For push | Email used in Web Push VAPID headers |
-| `RAPIDAPI_KEY` | No | JSearch (LinkedIn/Indeed/Glassdoor), every 12h |
-| `FANTASTIC_API_KEY` | No | Fantastic.jobs Active Jobs DB, every 12h |
-| `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | No | Adzuna job search |
-| `MUSE_API_KEY` | No | The Muse — higher rate limits |
+| `DATABASE_URL` | Yes | Postgres connection string |
+| `ALLOWED_ORIGIN` | In production | Frontend URL for CORS |
+| `PUSH_CONTACT_EMAIL` | For push alerts | Contact email for Web Push |
+| `RAPIDAPI_KEY` | No | JSearch |
+| `FANTASTIC_API_KEY` | No | Fantastic.jobs |
+| `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | No | Adzuna |
+| `MUSE_API_KEY` | No | Higher rate limit for The Muse |
 
-Keep all secrets in `backend/.env` only. Do not commit this file.
-
-### Frontend (`frontend/.env.local`)
-
-| Variable | Required | Description |
-|---|---|---|
-| `NEXT_PUBLIC_API_URL` | No | Backend API URL (default: `http://localhost:4000/api`) |
-
-The frontend only needs the public backend URL — no database or scraper keys.
+Frontend (`frontend/.env.local`): `NEXT_PUBLIC_API_URL`, defaults to `http://localhost:4000/api`.
 
 ## Deploy
 
-**Supabase** — use the same project from local setup.
-
-**Railway (backend)**
-
-1. Connect the GitHub repo, set root directory to `backend`
-2. Set `DATABASE_URL`, `ALLOWED_ORIGIN`, and `PUSH_CONTACT_EMAIL`
-3. Add optional API keys as needed
-
-**Vercel (frontend)**
-
-1. Connect the repo, set root directory to `frontend`
-2. Set `NEXT_PUBLIC_API_URL` to your Railway URL with `/api` suffix
-
-## Project structure
-
-```
-backend/
-  src/
-    server.js     Express REST API
-    db.js         Postgres data layer
-    scraper.js    Hourly scraper orchestrator (free boards, optional feeds)
-    fastPoll.js   15-minute poller for the 7 direct-ATS sources, with closed-listing detection
-    scheduler.js  Cron jobs
-    scrapers/     One module per job source
-    watchers/     Company watchlist monitor
-    utils/        Filters, ATS detection, schema.org parsing, staleness detection, WDC discovery, push
-    presets/      Regional and discovered company presets
-  scripts/        One-off maintenance scripts (watchlist repair, company discovery)
-frontend/
-  src/
-    app/          Dashboard and settings pages
-    components/   Watchlist, notification bell
-    lib/api.ts    API client
-```
+- **Railway (backend):** root directory `backend`, set `DATABASE_URL`, `ALLOWED_ORIGIN`, `PUSH_CONTACT_EMAIL`.
+- **Vercel (frontend):** root directory `frontend`, set `NEXT_PUBLIC_API_URL` to the Railway URL plus `/api`.
 
 ## Scripts
 
 ```bash
-# Backend — dev with auto-reload
-cd backend && npm run dev
+cd backend
+npm test                                  # run tests
+npm run scrape                            # one scrape run, then exit
+node scripts/dry-run-scrapers.js [name]   # test scrapers against live sources, no DB
+node scripts/e2e-local.js                 # full pipeline against the DB in DATABASE_URL
+node scripts/repair-watchlist.js --errors-only
+node scripts/discover-companies-from-wdc.js
+```
 
-# Backend — one-off scrape
-cd backend && npm run scrape
+## Project layout
 
-# Backend — run the test suite
-cd backend && npm test
-
-# Backend — discover new watchlist companies from Web Data Commons
-cd backend && node scripts/discover-companies-from-wdc.js
-
-# Backend — re-probe and repair watched companies stuck in an error state
-cd backend && node scripts/repair-watchlist.js --errors-only
-
-# Frontend
-cd frontend && npm run dev
+```
+backend/src/
+  server.js      REST API
+  db.js          Postgres queries and migrations
+  scraper.js     hourly job-site scrape
+  fastPoll.js    15-minute ATS poll + closed-listing check
+  scheduler.js   cron setup
+  scrapers/      one file per source
+  watchers/      company watchlist
+  utils/         filters, company discovery, helpers
+  presets/       company lists for the watchlist
+frontend/src/    Next.js dashboard
 ```
 
 ## License
 
-MIT — personal use. Job data belongs to the original sources; this project aggregates publicly available APIs and feeds.
+MIT. Job data belongs to the original sources.
 
 ## Reach out
 
