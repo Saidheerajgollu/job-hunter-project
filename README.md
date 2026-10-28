@@ -1,4 +1,4 @@
-# Job Hunter Pro
+# Job Hunter
 
 A job aggregator for US tech roles. The backend collects postings from company job boards, big-company career sites, and public job sites, and stores them in Postgres. The frontend is a shared, public job board: everyone sees the same feed and applies on the company's own site. There are no accounts and no per-user state.
 
