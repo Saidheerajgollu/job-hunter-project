@@ -9,7 +9,7 @@ import { makeJobId, isSeniorRole, sleep, classifyCategory, mapWithConcurrency } 
 
 const ASHBY_API = 'https://api.ashbyhq.com/posting-api/job-board';
 
-const ASHBY_COMPANIES = [
+export const ASHBY_COMPANIES = [
     // AI / ML / Dev Tools
     { slug: 'anyscale', name: 'Anyscale' },
     { slug: 'together', name: 'Together AI' },
@@ -46,17 +46,23 @@ const ASHBY_COMPANIES = [
 
 const CONCURRENCY = 8; // boards fetched in parallel
 
-export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
+/**
+ * options (used by the 6-hourly wide sweep over the public ATS directory):
+ *   includeSeed  — also poll the hand-picked list above (default true)
+ *   concurrency  — boards in flight; this API is one host, so stay ≤ 8
+ */
+export async function scrapeAshby(filterSenior = true, extraCompanies = [], { includeSeed = true, concurrency = CONCURRENCY } = {}) {
     const jobs = [];
     const polledCompanies = [];
     const seenUrls = [];
-    const extraObjs = extraCompanies.map(slug => ({ slug, name: slug }));
+    const seed = includeSeed ? ASHBY_COMPANIES : [];
+    const seedSlugs = new Set(seed.map(a => a.slug));
     const allCompanies = [
-        ...ASHBY_COMPANIES,
-        ...extraObjs.filter(e => !ASHBY_COMPANIES.some(a => a.slug === e.slug)),
+        ...seed,
+        ...extraCompanies.filter(slug => !seedSlugs.has(slug)).map(slug => ({ slug, name: slug })),
     ];
 
-    await mapWithConcurrency(allCompanies, CONCURRENCY, async (company) => {
+    await mapWithConcurrency(allCompanies, concurrency, async (company) => {
         try {
             const url = `${ASHBY_API}/${company.slug}`;
             const resp = await fetch(url, {

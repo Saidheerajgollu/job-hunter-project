@@ -18,7 +18,7 @@ import { parseWorkdayUrl, fetchWorkdayPage, workdayJobUrl, WORKDAY_PAGE_SIZE } f
 
 // Each entry: { company, careerUrl }
 // careerUrl must match: https://{tenant}.wd{N}.myworkdayjobs.com/{site}[/...]
-const WORKDAY_COMPANIES = [
+export const WORKDAY_COMPANIES = [
     // Cloud / SaaS
     { company: 'Salesforce',   careerUrl: 'https://salesforce.wd12.myworkdayjobs.com/External' },
     { company: 'ServiceNow',   careerUrl: 'https://servicenow.wd5.myworkdayjobs.com/External' },
@@ -52,13 +52,13 @@ const DISCOVERED_SEARCH_TERMS = ['software engineer', 'data', 'machine learning'
 const MAX_PAGES_PER_TERM = 3;   // 60 postings per term
 const CONCURRENCY = 10;         // tenants fetched in parallel
 
-async function fetchWorkdayJobs(wd, terms) {
+async function fetchWorkdayJobs(wd, terms, maxPages = MAX_PAGES_PER_TERM) {
     const allJobs = [];
     let anyOk = false;
 
     for (const term of terms) {
         try {
-            for (let page = 0; page < MAX_PAGES_PER_TERM; page++) {
+            for (let page = 0; page < maxPages; page++) {
                 const batch = await fetchWorkdayPage(wd, { searchText: term, offset: page * WORKDAY_PAGE_SIZE, timeoutMs: 15000 });
                 anyOk = true;
                 for (const posting of batch) {
@@ -95,15 +95,24 @@ function mergeCompanies(seedList, discovered) {
     return [...byHost.values()];
 }
 
-export async function scrapeWorkday(filterSenior = true, discoveredCompanies = []) {
+/**
+ * options (used by the 6-hourly wide sweep over the public ATS directory):
+ *   includeSeed  — also poll the hand-picked list above (default true)
+ *   terms        — search terms for non-seed tenants
+ *   maxPages     — pages (of 20) per term
+ *   concurrency  — tenants in flight (each tenant is its own host)
+ */
+export async function scrapeWorkday(filterSenior = true, discoveredCompanies = [], {
+    includeSeed = true, terms = DISCOVERED_SEARCH_TERMS, maxPages = MAX_PAGES_PER_TERM, concurrency = CONCURRENCY,
+} = {}) {
     const jobs = [];
     const polledCompanies = [];
     const seenUrls = [];
-    const companies = mergeCompanies(WORKDAY_COMPANIES, discoveredCompanies);
+    const companies = mergeCompanies(includeSeed ? WORKDAY_COMPANIES : [], discoveredCompanies);
 
-    await mapWithConcurrency(companies, CONCURRENCY, async ({ company, wd, seed }) => {
+    await mapWithConcurrency(companies, concurrency, async ({ company, wd, seed }) => {
         try {
-            const postings = await fetchWorkdayJobs(wd, seed ? TECH_SEARCH_TERMS : DISCOVERED_SEARCH_TERMS);
+            const postings = await fetchWorkdayJobs(wd, seed ? TECH_SEARCH_TERMS : terms, maxPages);
             // fetchWorkdayJobs returns [] for both "endpoint down" and "zero
             // matching jobs" — indistinguishable. To avoid false negatives
             // (closing valid listings on a transient outage), only count this
@@ -136,7 +145,7 @@ export async function scrapeWorkday(filterSenior = true, discoveredCompanies = [
                     // now() only when Workday omits it — stamping now() on every
                     // poll made each job look like a fresh repost every day.
                     posted_at: parseWorkdayPostedOn(posting.postedOn) || new Date().toISOString(),
-                    posted_at_estimated: isWorkdayPostedOnCapped(posting.postedOn),
+                    posted_at_estimated: !posting.postedOn || isWorkdayPostedOnCapped(posting.postedOn),
                 });
             }
 

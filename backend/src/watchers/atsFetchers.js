@@ -278,7 +278,7 @@ async function fetchWorkday(careerUrl) {
             url,
             location: j.locationsText || 'US',
             posted_at: parseWorkdayPostedOn(j.postedOn) || new Date().toISOString(),
-            posted_at_estimated: isWorkdayPostedOnCapped(j.postedOn),
+            posted_at_estimated: !j.postedOn || isWorkdayPostedOnCapped(j.postedOn),
             source: 'workday',
         };
     });

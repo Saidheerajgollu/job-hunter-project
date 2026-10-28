@@ -19,7 +19,16 @@ import { discoverATSCompanies, emptyDiscovery } from './utils/discoverCompanies.
 import { insertJob, closeStaleJobs, getAllSettings } from './db.js';
 import { isEligibleJob } from './utils/helpers.js';
 
-async function saveAndClose(name, source, { jobs, polledCompanies, seenUrls }, closerEnabled) {
+// Company names each source's fast poll covered on its last run. The wide
+// sweep must not store jobs under those names: the closer matches by
+// source + company, so the fast poll would see them as "missing" and close them.
+const corePolledCompanies = new Map();
+
+export function getCorePolledCompanies(source) {
+    return corePolledCompanies.get(source) || new Set();
+}
+
+export async function saveAndClose(name, source, { jobs, polledCompanies, seenUrls }, closerEnabled) {
     let newCount = 0;
     const seen = new Set();
     for (const job of jobs) {
@@ -74,6 +83,7 @@ export async function runFastAtsPoll() {
     await Promise.allSettled(sources.map(async ({ name, source, closerEnabled, fn }) => {
         try {
             const result = await fn();
+            corePolledCompanies.set(source, new Set(result.polledCompanies));
             const { found, newCount } = await saveAndClose(name, source, result, closerEnabled);
             totalFound += found;
             totalNew += newCount;

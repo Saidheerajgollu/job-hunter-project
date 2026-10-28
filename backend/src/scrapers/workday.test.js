@@ -132,4 +132,15 @@ describe('scrapeWorkday', () => {
         expect(polledCompanies).toContain('Generalmotors');
         expect(jobs[0].url).toBe('https://generalmotors.wd5.myworkdayjobs.com/Careers_GM/job/gm1');
     });
+
+    it('marks the date as estimated when a tenant sends no postedOn, so it is never shown as fresh or a repost', async () => {
+        mockFetch(async (url) => {
+            if (!String(url).includes('salesforce.wd12')) return { ok: true, json: async () => ({ jobPostings: [] }) };
+            return { ok: true, json: async () => ({ jobPostings: [{ title: 'Software Engineer', externalPath: '/job/n1', locationsText: 'Seattle, WA' }] }) };
+        });
+
+        const { jobs } = await scrapeWorkday(true);
+
+        expect(jobs[0].posted_at_estimated).toBe(true);
+    });
 });

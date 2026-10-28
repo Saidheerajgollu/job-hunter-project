@@ -7,7 +7,7 @@
 import { makeJobId, isSeniorRole, sleep, classifyCategory, mapWithConcurrency, toIsoDate } from '../utils/helpers.js';
 
 // Companies known to use Greenhouse job boards
-const GREENHOUSE_COMPANIES = [
+export const GREENHOUSE_COMPANIES = [
     // AI / ML / Research
     'openai', 'anthropic', 'cohere', 'scale', 'huggingface', 'stability',
     'adept', 'inflection', 'perplexity', 'together', 'character',
@@ -58,15 +58,21 @@ const GREENHOUSE_COMPANIES = [
 
 const CONCURRENCY = 8; // boards fetched in parallel — sequential took 10+ min per poll
 
-export async function scrapeGreenhouse(filterSenior = true, extraCompanies = []) {
+/**
+ * options (used by the 6-hourly wide sweep over the public ATS directory):
+ *   includeSeed  — also poll the hand-picked list above (default true)
+ *   concurrency  — boards in flight; this API is one host, so stay ≤ 8
+ *   withContent  — fetch descriptions (much larger payloads; default true)
+ */
+export async function scrapeGreenhouse(filterSenior = true, extraCompanies = [], { includeSeed = true, withContent = true, concurrency = CONCURRENCY } = {}) {
     const jobs = [];
     const polledCompanies = [];
     const seenUrls = [];
-    const allCompanies = [...new Set([...GREENHOUSE_COMPANIES, ...extraCompanies])];
+    const allCompanies = [...new Set([...(includeSeed ? GREENHOUSE_COMPANIES : []), ...extraCompanies])];
 
-    await mapWithConcurrency(allCompanies, CONCURRENCY, async (company) => {
+    await mapWithConcurrency(allCompanies, concurrency, async (company) => {
         try {
-            const url = `https://boards-api.greenhouse.io/v1/boards/${company}/jobs?content=true`;
+            const url = `https://boards-api.greenhouse.io/v1/boards/${company}/jobs${withContent ? '?content=true' : ''}`;
             const resp = await fetch(url, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)' },
                 signal: AbortSignal.timeout(20000),

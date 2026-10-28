@@ -5,6 +5,8 @@
  *   1. Main scraper   — Greenhouse / Lever / Ashby / Workday / SimplifyJobs /
  *                       The Muse / Jobicy.
  *                       Runs immediately on boot, then every hour.
+ *   1b. Wide sweep    — every board in the public ATS directory, fresh jobs only.
+ *                       Every 6 hours (disable with WIDE_SWEEP=false).
  *   2. Company watcher — diffs each watched company's ATS board, fires push alerts.
  *                       Runs every 30 minutes.
  *   3. JSearch        — LinkedIn / Indeed / Glassdoor via RapidAPI.
@@ -19,6 +21,7 @@ import { scrapeJSearch } from './scrapers/jsearch.js';
 import { scrapeFantasticJobs } from './scrapers/fantasticJobs.js';
 import { runCompanyWatcher } from './watchers/companyWatcher.js';
 import { runFastAtsPoll } from './fastPoll.js';
+import { runWideSweep, wideSweepEnabled } from './wideSweep.js';
 import { insertJob, getAllSettings } from './db.js';
 import { isEligibleJob } from './utils/helpers.js';
 
@@ -27,6 +30,7 @@ let isJSearchRunning = false;
 let isFantasticRunning = false;
 let isWatcherRunning = false;
 let isFastPollRunning = false;
+let isWideSweepRunning = false;
 
 export function startScheduler() {
     console.log('⏰ Scheduler initialized — main scraper hourly, fast ATS poll every 15 min, watcher every 30 min, JSearch every 12h');
@@ -41,6 +45,13 @@ export function startScheduler() {
     // then every 15 minutes.
     setTimeout(() => runFastAtsPollSafe(), 2 * 60 * 1000);
     cron.schedule('*/15 * * * *', () => runFastAtsPollSafe());
+
+    // Wide sweep: every board in the public ATS directory not covered above,
+    // fresh postings only. First run 20 min after boot, then every 6 hours.
+    if (wideSweepEnabled()) {
+        setTimeout(() => runWideSweepSafe(), 20 * 60 * 1000);
+        cron.schedule('30 */6 * * *', () => runWideSweepSafe());
+    }
 
     // Company watcher: first run 1 min after startup, then every 30 minutes.
     // The isWatcherRunning guard skips a cycle if the previous one is still going.
@@ -160,6 +171,21 @@ async function runFastAtsPollSafe() {
         console.error('💥 Fatal fast-ATS-poll error:', err);
     } finally {
         isFastPollRunning = false;
+    }
+}
+
+async function runWideSweepSafe() {
+    if (isWideSweepRunning) {
+        console.log('⚠️  Wide sweep already running, skipping this cycle');
+        return;
+    }
+    isWideSweepRunning = true;
+    try {
+        await runWideSweep();
+    } catch (err) {
+        console.error('💥 Fatal wide-sweep error:', err);
+    } finally {
+        isWideSweepRunning = false;
     }
 }
 

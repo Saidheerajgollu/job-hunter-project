@@ -6,7 +6,7 @@
 
 import { makeJobId, isSeniorRole, sleep, classifyCategory, mapWithConcurrency } from '../utils/helpers.js';
 
-const LEVER_COMPANIES = [
+export const LEVER_COMPANIES = [
     // AI / ML
     'openai', 'anthropic', 'scale-ai', 'cohere', 'x-ai',
     'character', 'waymo', 'cruise', 'imbue',
@@ -28,13 +28,18 @@ const LEVER_COMPANIES = [
 
 const CONCURRENCY = 8; // boards fetched in parallel
 
-export async function scrapeLever(filterSenior = true, extraCompanies = []) {
+/**
+ * options (used by the 6-hourly wide sweep over the public ATS directory):
+ *   includeSeed  — also poll the hand-picked list above (default true)
+ *   concurrency  — boards in flight; this API is one host, so stay ≤ 8
+ */
+export async function scrapeLever(filterSenior = true, extraCompanies = [], { includeSeed = true, concurrency = CONCURRENCY } = {}) {
     const jobs = [];
     const polledCompanies = [];
     const seenUrls = [];
-    const allCompanies = [...new Set([...LEVER_COMPANIES, ...extraCompanies])];
+    const allCompanies = [...new Set([...(includeSeed ? LEVER_COMPANIES : []), ...extraCompanies])];
 
-    await mapWithConcurrency(allCompanies, CONCURRENCY, async (company) => {
+    await mapWithConcurrency(allCompanies, concurrency, async (company) => {
         try {
             // No server-side commitment filter: it's an exact match against values
             // like "Full-time", so the old `commitment=fulltime` returned nothing
