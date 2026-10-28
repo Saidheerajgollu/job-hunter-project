@@ -13,22 +13,23 @@ import { makeJobId, isSeniorRole, classifyCategory, sleep } from '../utils/helpe
 
 const BASE = 'https://www.themuse.com/api/public/jobs';
 
-// Categories that map to tech roles on The Muse
+// Category names as The Muse API spells them — the previous names
+// ("Software Engineer", "Data Science", "DevOps"...) matched almost nothing.
 const TECH_CATEGORIES = [
-    'Software Engineer',
-    'Data Science',
-    'Data Analysis',
-    'Machine Learning',
-    'DevOps',
-    'IT',
-    'QA',
-    'Product',
+    'Software Engineering',
+    'Data and Analytics',
+    'Computer and IT',
+    'Science and Engineering',
 ];
+const PAGES_PER_CATEGORY = 5;
+// The Muse keeps very old postings live; ignore anything older than this.
+const MAX_AGE_MS = 60 * 24 * 60 * 60 * 1000;
 
 async function fetchMusePage(category, page) {
     const params = new URLSearchParams({
         category,
         page: String(page),
+        descending: 'true',
         ...(process.env.MUSE_API_KEY ? { api_key: process.env.MUSE_API_KEY } : {}),
     });
 
@@ -51,7 +52,7 @@ export async function scrapeTheMuse(filterSenior = true) {
 
     for (const category of TECH_CATEGORIES) {
         try {
-            for (let page = 0; page < 3; page++) {
+            for (let page = 0; page < PAGES_PER_CATEGORY; page++) {
                 const data = await fetchMusePage(category, page);
                 const results = data.results || [];
                 if (results.length === 0) break;
@@ -63,6 +64,9 @@ export async function scrapeTheMuse(filterSenior = true) {
 
                         const title = job.name || '';
                         if (filterSenior && isSeniorRole(title)) continue;
+
+                        const publishedMs = Date.parse(job.publication_date || '');
+                        if (!Number.isNaN(publishedMs) && Date.now() - publishedMs > MAX_AGE_MS) continue;
 
                         const company = job.company?.name || 'Unknown';
                         const location = job.locations?.map(l => l.name).join(', ') || 'Remote';

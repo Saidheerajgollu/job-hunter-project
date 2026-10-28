@@ -63,4 +63,33 @@ describe('scrapeGreenhouse', () => {
         expect(jobs).toEqual([]);
         expect(polledCompanies).toContain('Quietco');
     });
+
+    it('uses the board\'s real company_name and first_published date when Greenhouse provides them', async () => {
+        mockFetch(async (url) => {
+            if (!String(url).includes('/hudson-river-trading/')) return { ok: true, json: async () => ({ jobs: [] }) };
+            return {
+                ok: true,
+                json: async () => ({
+                    jobs: [{
+                        id: 7, title: 'Software Engineer', company_name: 'Hudson River Trading',
+                        absolute_url: 'https://www.hudsonrivertrading.com/careers/job/?gh_jid=7',
+                        location: { name: 'New York, NY' },
+                        first_published: '2026-09-09T10:50:29-04:00',
+                        updated_at: '2026-10-22T09:17:09-04:00',
+                    }],
+                }),
+            };
+        });
+
+        const { jobs, polledCompanies } = await scrapeGreenhouse(true, ['hudson-river-trading']);
+        const job = jobs.find(j => j.url.includes('gh_jid=7'));
+
+        expect(job.company).toBe('Hudson River Trading');
+        // An edit (updated_at) must not masquerade as the posting date / a repost.
+        expect(job.posted_at).toBe('2026-09-09T14:50:29.000Z');
+        // Both the real name and the legacy slug-derived name count as polled, so
+        // rows stored under the old name are still eligible for the closer sweep.
+        expect(polledCompanies).toContain('Hudson River Trading');
+        expect(polledCompanies).toContain('Hudson-river-trading');
+    });
 });

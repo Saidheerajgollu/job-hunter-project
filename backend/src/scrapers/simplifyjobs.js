@@ -84,7 +84,11 @@ export async function scrapeSimplifyJobs(filterSenior = true) {
                 source: 'simplifyjobs',
                 category,
                 salary: null,
-                description: null,
+                // Surface Simplify's explicit flag so isEligibleJob's citizenship
+                // check (and the feed's SQL filter) can drop citizen-only roles.
+                description: listing.sponsorship === 'U.S. Citizenship is Required'
+                    ? 'U.S. Citizenship is Required'
+                    : null,
                 posted_at: postedAt,
             });
         }

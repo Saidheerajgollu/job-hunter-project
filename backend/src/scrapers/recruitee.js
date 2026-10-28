@@ -6,7 +6,7 @@
  * API: https://{slug}.recruitee.com/api/offers/
  */
 
-import { isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
+import { isSeniorRole, sleep, classifyCategory, mapWithConcurrency } from '../utils/helpers.js';
 import { fetchRecruitee as fetchPostings } from '../watchers/atsFetchers.js';
 
 const RECRUITEE_COMPANIES = [
@@ -16,6 +16,8 @@ const RECRUITEE_COMPANIES = [
     { slug: 'bynder', name: 'Bynder' },
     { slug: 'mendix', name: 'Mendix' },
 ];
+
+const CONCURRENCY = 8; // boards fetched in parallel
 
 export async function scrapeRecruitee(filterSenior = true, extraCompanies = []) {
     const jobs = [];
@@ -27,7 +29,7 @@ export async function scrapeRecruitee(filterSenior = true, extraCompanies = []) 
         ...extraObjs.filter(e => !RECRUITEE_COMPANIES.some(c => c.slug === e.slug)),
     ];
 
-    for (const company of allCompanies) {
+    await mapWithConcurrency(allCompanies, CONCURRENCY, async (company) => {
         try {
             const postings = await fetchPostings(company.slug);
             polledCompanies.push(company.name);
@@ -59,13 +61,13 @@ export async function scrapeRecruitee(filterSenior = true, extraCompanies = []) 
             if (postings.length > 0) {
                 console.log(`✅ Recruitee [${company.name}]: ${jobs.length} tech roles so far (${postings.length} total)`);
             }
-            await sleep(250);
+            await sleep(100);
         } catch (err) {
             if (!err.message?.includes('404')) {
                 console.error(`❌ Recruitee [${company.name}]: ${err.message}`);
             }
         }
-    }
+    });
 
     return { jobs, polledCompanies, seenUrls };
 }

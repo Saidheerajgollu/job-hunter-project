@@ -5,7 +5,7 @@
  * API: https://api.ashbyhq.com/posting-api/job-board/{slug}
  */
 
-import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
+import { makeJobId, isSeniorRole, sleep, classifyCategory, mapWithConcurrency } from '../utils/helpers.js';
 
 const ASHBY_API = 'https://api.ashbyhq.com/posting-api/job-board';
 
@@ -44,6 +44,8 @@ const ASHBY_COMPANIES = [
     { slug: 'vercel', name: 'Vercel' },
 ];
 
+const CONCURRENCY = 8; // boards fetched in parallel
+
 export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
     const jobs = [];
     const polledCompanies = [];
@@ -54,17 +56,17 @@ export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
         ...extraObjs.filter(e => !ASHBY_COMPANIES.some(a => a.slug === e.slug)),
     ];
 
-    for (const company of allCompanies) {
+    await mapWithConcurrency(allCompanies, CONCURRENCY, async (company) => {
         try {
             const url = `${ASHBY_API}/${company.slug}`;
             const resp = await fetch(url, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)' },
-                signal: AbortSignal.timeout(10000),
+                signal: AbortSignal.timeout(20000),
             });
 
             if (!resp.ok) {
                 if (resp.status !== 404) console.warn(`⚠️  Ashby ${company.slug}: HTTP ${resp.status}`);
-                continue;
+                return;
             }
 
             const data = await resp.json();
@@ -110,13 +112,13 @@ export async function scrapeAshby(filterSenior = true, extraCompanies = []) {
             if (postings.length > 0) {
                 console.log(`✅ Ashby [${company.name}]: ${companyCount} tech roles (${postings.length} total)`);
             }
-            await sleep(250);
+            await sleep(100);
         } catch (err) {
             if (!err.message?.includes('404')) {
                 console.error(`❌ Ashby [${company.name}]: ${err.message}`);
             }
         }
-    }
+    });
 
     return { jobs, polledCompanies, seenUrls };
 }

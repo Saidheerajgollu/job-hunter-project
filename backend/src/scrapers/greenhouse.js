@@ -4,7 +4,7 @@
  * No browser needed — pure HTTP fetch.
  */
 
-import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
+import { makeJobId, isSeniorRole, sleep, classifyCategory, mapWithConcurrency, toIsoDate } from '../utils/helpers.js';
 
 // Companies known to use Greenhouse job boards
 const GREENHOUSE_COMPANIES = [
@@ -39,6 +39,8 @@ const GREENHOUSE_COMPANIES = [
     'tempus', 'flatiron', 'veeva', 'doximity', 'oscar', 'cityblock',
     // Quant / Finance
     'jane-street', 'tower-research', 'hudson-river-trading', 'citadel',
+    // Aerospace
+    'spacex',
     // Seattle / Bellevue OPT-friendly
     'expedia', 'docusign', 'smartsheet', 'avalara',
     'watchguard', 'f5', 'nintex', 'allenai', 'vastdata',
@@ -54,29 +56,35 @@ const GREENHOUSE_COMPANIES = [
     'replit', 'sentry', 'notion', 'benchling',
 ];
 
+const CONCURRENCY = 8; // boards fetched in parallel — sequential took 10+ min per poll
+
 export async function scrapeGreenhouse(filterSenior = true, extraCompanies = []) {
     const jobs = [];
     const polledCompanies = [];
     const seenUrls = [];
     const allCompanies = [...new Set([...GREENHOUSE_COMPANIES, ...extraCompanies])];
 
-    for (const company of allCompanies) {
+    await mapWithConcurrency(allCompanies, CONCURRENCY, async (company) => {
         try {
             const url = `https://boards-api.greenhouse.io/v1/boards/${company}/jobs?content=true`;
             const resp = await fetch(url, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)' },
-                signal: AbortSignal.timeout(10000),
+                signal: AbortSignal.timeout(20000),
             });
 
             if (!resp.ok) {
                 if (resp.status !== 404) console.warn(`⚠️  Greenhouse ${company}: HTTP ${resp.status}`);
-                continue;
+                return;
             }
 
             const data = await resp.json();
             const allJobs = data.jobs || [];
-            const companyName = company.charAt(0).toUpperCase() + company.slice(1);
+            // Slug-derived name ("Hudson-river-trading") is what older rows were
+            // stored under; prefer the board's real name when it's provided.
+            const legacyName = company.charAt(0).toUpperCase() + company.slice(1);
+            const companyName = allJobs.find(j => j.company_name)?.company_name || legacyName;
             polledCompanies.push(companyName);
+            if (legacyName !== companyName) polledCompanies.push(legacyName);
 
             let companyCount = 0;
             for (const job of allJobs) {
@@ -84,13 +92,15 @@ export async function scrapeGreenhouse(filterSenior = true, extraCompanies = [])
                 seenUrls.push(jobUrl);
 
                 const title = job.title || '';
-                const description = job.content ? job.content.replace(/<[^>]*>/g, '').slice(0, 500) : '';
+                const description = job.content ? decodeEntities(job.content).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 500) : '';
                 const category = classifyCategory(title, description);
                 if (!category) continue;
                 if (filterSenior && isSeniorRole(title)) continue;
 
                 const location = job.location?.name || 'Remote/Unknown';
-                const postedAt = job.updated_at ? new Date(job.updated_at).toISOString() : new Date().toISOString();
+                // first_published is when the role went live; updated_at moves on
+                // every edit, which made edited listings look like reposts.
+                const postedAt = toIsoDate(job.first_published || job.updated_at);
 
                 jobs.push({
                     id: makeJobId(jobUrl),
@@ -110,13 +120,20 @@ export async function scrapeGreenhouse(filterSenior = true, extraCompanies = [])
             if (allJobs.length > 0) {
                 console.log(`✅ Greenhouse [${company}]: ${companyCount} tech roles (${allJobs.length} total)`);
             }
-            await sleep(300); // Be polite to the API
+            await sleep(100); // Be polite to the API
         } catch (err) {
             if (!err.message.includes('404')) {
                 console.error(`❌ Greenhouse [${company}]: ${err.message}`);
             }
         }
-    }
+    });
 
     return { jobs, polledCompanies, seenUrls };
+}
+
+/** Greenhouse `content` is HTML-escaped HTML ("&lt;p&gt;..."); unescape before stripping tags. */
+function decodeEntities(str) {
+    return str
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'").replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
 }

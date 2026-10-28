@@ -9,26 +9,26 @@
  * Limit:    50 results per request. ToS: do not re-publish listings.
  */
 
-import { makeJobId, isSeniorRole, classifyCategory, isUSCompatible, sleep } from '../utils/helpers.js';
+import { makeJobId, isSeniorRole, classifyCategory, isUSCompatible, sleep, toIsoDate } from '../utils/helpers.js';
 
 const BASE = 'https://jobicy.com/api/v2/remote-jobs';
 
-// Industry + tag combos that cover tech new-grad roles
+// Jobicy industry slugs (from https://jobicy.com/api/v2/remote-jobs?get=industries).
+// The old slugs ("software", "devops-sysadmin") are rejected with HTTP 400, and
+// combining industry + tag narrowed results to near zero, so we query by
+// industry only and let classifyCategory pick out the tech roles.
 const QUERIES = [
-    { industry: 'software', tag: 'software-engineer' },
-    { industry: 'software', tag: 'backend' },
-    { industry: 'software', tag: 'frontend' },
-    { industry: 'data-science',   tag: 'data-scientist' },
-    { industry: 'data-science',   tag: 'machine-learning' },
-    { industry: 'devops-sysadmin', tag: 'devops' },
+    { industry: 'engineering' },    // Software Engineering
+    { industry: 'data-science' },   // Data Science & Analytics
+    { industry: 'admin' },          // DevOps & Infrastructure
+    { industry: 'cybersecurity' },
 ];
 
-async function fetchJobicy(industry, tag) {
+async function fetchJobicy(industry) {
     const params = new URLSearchParams({
         count: '50',
         geo: 'usa',
         industry,
-        tag,
     });
 
     const resp = await fetch(`${BASE}?${params}`, {
@@ -45,9 +45,9 @@ export async function scrapeJobicy(filterSenior = true) {
     const jobs = [];
     const seenUrls = new Set();
 
-    for (const { industry, tag } of QUERIES) {
+    for (const { industry } of QUERIES) {
         try {
-            const results = await fetchJobicy(industry, tag);
+            const results = await fetchJobicy(industry);
 
             for (const job of results) {
                 const url = job.url;
@@ -77,15 +77,13 @@ export async function scrapeJobicy(filterSenior = true) {
                     category,
                     salary,
                     description: null,
-                    posted_at: job.pubDate
-                        ? new Date(job.pubDate).toISOString()
-                        : new Date().toISOString(),
+                    posted_at: toIsoDate(job.pubDate),
                 });
             }
 
             await sleep(400);
         } catch (err) {
-            console.error(`❌ Jobicy [${industry}/${tag}]: ${err.message}`);
+            console.error(`❌ Jobicy [${industry}]: ${err.message}`);
         }
     }
 

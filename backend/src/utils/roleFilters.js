@@ -2,7 +2,7 @@
  * Role chip → title/description keyword patterns.
  * Matching is substring (ILIKE) so "Senior Software Engineer - Infra" matches Software Eng.
  */
-import { getNonUsLocationPgRegex } from './helpers.js';
+import { getNonUsLocationPgRegex, getUsLocationPgRegex } from './helpers.js';
 
 /** Best estimate of when the role was posted/reposted on the company portal. */
 export const PORTAL_DATE_SQL = 'COALESCE(reposted_at, posted_at, scraped_at)';
@@ -280,8 +280,13 @@ export function buildJobQueryFilters({
     }
 
     if (us_only) {
+        // Hide non-US locations — unless the string also names a US place
+        // (multi-office roles like "San Francisco, CA | London" stay visible,
+        // matching isUSCompatible's insert-time check).
         params.push(getNonUsLocationPgRegex());
-        conditions.push(`COALESCE(location, '') !~* $${params.length}`);
+        const nonUsIdx = params.length;
+        params.push(getUsLocationPgRegex());
+        conditions.push(`(COALESCE(location, '') !~* $${nonUsIdx} OR COALESCE(location, '') ~* $${params.length})`);
         // Exclude US-citizenship-only roles from title + description
         for (const pattern of CITIZENSHIP_BLOCKED_PATTERNS) {
             params.push(pattern);

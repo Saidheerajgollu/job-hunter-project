@@ -8,10 +8,13 @@
  * Each company has a unique subdomain + wd-server + site name.
  * careerUrl is the canonical public career page; the CXS endpoint is derived
  * from it by parseWorkdayUrl() (same function used by companyWatcher).
+ *
+ * Companies come from the seed list below plus tenants discovered at runtime
+ * from SimplifyJobs listings (Workday is the most common ATS there).
  */
 
-import { makeJobId, isSeniorRole, sleep, classifyCategory, TECH_SEARCH_TERMS } from '../utils/helpers.js';
-import { parseWorkdayUrl } from '../watchers/atsFetchers.js';
+import { makeJobId, isSeniorRole, sleep, classifyCategory, mapWithConcurrency, parseWorkdayPostedOn, isWorkdayPostedOnCapped, TECH_SEARCH_TERMS } from '../utils/helpers.js';
+import { parseWorkdayUrl, fetchWorkdayPage, workdayJobUrl, WORKDAY_PAGE_SIZE } from '../watchers/atsFetchers.js';
 
 // Each entry: { company, careerUrl }
 // careerUrl must match: https://{tenant}.wd{N}.myworkdayjobs.com/{site}[/...]
@@ -43,40 +46,33 @@ const WORKDAY_COMPANIES = [
     { company: 'HP',           careerUrl: 'https://hp.wd5.myworkdayjobs.com/ExternalCareerSite' },
 ];
 
-async function fetchWorkdayJobs(company, careerUrl) {
-    const wd = parseWorkdayUrl(careerUrl);
-    if (!wd) {
-        console.warn(`⚠️  Workday [${company}]: could not parse career URL: ${careerUrl}`);
-        return [];
-    }
+// Seed companies get the full term list; discovered tenants (hundreds of them)
+// get a compact list so one poll stays within a few thousand requests.
+const DISCOVERED_SEARCH_TERMS = ['software engineer', 'data', 'machine learning'];
+const MAX_PAGES_PER_TERM = 3;   // 60 postings per term
+const CONCURRENCY = 10;         // tenants fetched in parallel
 
-    const endpoint = `https://${wd.host}/wday/cxs/${wd.tenant}/${wd.site}/jobs`;
+async function fetchWorkdayJobs(wd, terms) {
     const allJobs = [];
+    let anyOk = false;
 
-    for (const term of TECH_SEARCH_TERMS) {
+    for (const term of terms) {
         try {
-            const resp = await fetch(endpoint, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)',
-                },
-                body: JSON.stringify({ appliedFacets: {}, limit: 50, offset: 0, searchText: term }),
-                signal: AbortSignal.timeout(15000),
-            });
-
-            if (!resp.ok) break; // stop trying terms if the endpoint itself is broken
-
-            const data = await resp.json();
-            for (const posting of (data.jobPostings || [])) {
-                if (posting.externalPath) allJobs.push(posting);
+            for (let page = 0; page < MAX_PAGES_PER_TERM; page++) {
+                const batch = await fetchWorkdayPage(wd, { searchText: term, offset: page * WORKDAY_PAGE_SIZE, timeoutMs: 15000 });
+                anyOk = true;
+                for (const posting of batch) {
+                    if (posting.externalPath) allJobs.push(posting);
+                }
+                if (batch.length < WORKDAY_PAGE_SIZE) break;
+                await sleep(150);
             }
-
-            await sleep(200);
         } catch {
-            break;
+            // The tenant/site itself is broken (renamed, moved) — no point
+            // trying the remaining terms.
+            if (!anyOk) break;
         }
+        await sleep(150);
     }
 
     // Deduplicate by externalPath
@@ -88,27 +84,36 @@ async function fetchWorkdayJobs(company, careerUrl) {
     });
 }
 
-export async function scrapeWorkday(filterSenior = true) {
+function mergeCompanies(seedList, discovered) {
+    const byHost = new Map();
+    for (const entry of [...seedList.map(c => ({ ...c, seed: true })), ...discovered]) {
+        const wd = parseWorkdayUrl(entry.careerUrl);
+        if (!wd) continue;
+        const key = `${wd.host}/${wd.site}`.toLowerCase();
+        if (!byHost.has(key)) byHost.set(key, { ...entry, wd });
+    }
+    return [...byHost.values()];
+}
+
+export async function scrapeWorkday(filterSenior = true, discoveredCompanies = []) {
     const jobs = [];
     const polledCompanies = [];
     const seenUrls = [];
+    const companies = mergeCompanies(WORKDAY_COMPANIES, discoveredCompanies);
 
-    for (const { company, careerUrl } of WORKDAY_COMPANIES) {
+    await mapWithConcurrency(companies, CONCURRENCY, async ({ company, wd, seed }) => {
         try {
-            const wd = parseWorkdayUrl(careerUrl);
-            if (!wd) continue;
-
-            const postings = await fetchWorkdayJobs(company, careerUrl);
-            // fetchWorkdayJobs catches errors internally and returns [] for both
-            // "endpoint down" and "zero matching jobs" — indistinguishable. To avoid
-            // false negatives (closing valid listings on a transient outage), only
-            // count this company as polled when results were actually found.
+            const postings = await fetchWorkdayJobs(wd, seed ? TECH_SEARCH_TERMS : DISCOVERED_SEARCH_TERMS);
+            // fetchWorkdayJobs returns [] for both "endpoint down" and "zero
+            // matching jobs" — indistinguishable. To avoid false negatives
+            // (closing valid listings on a transient outage), only count this
+            // company as polled when results were actually found.
             if (postings.length > 0) {
                 polledCompanies.push(company);
             }
 
             for (const posting of postings) {
-                const jobUrl = `https://${wd.host}${posting.externalPath}`;
+                const jobUrl = workdayJobUrl(wd, posting.externalPath);
                 seenUrls.push(jobUrl);
 
                 const title = posting.title || '';
@@ -127,18 +132,21 @@ export async function scrapeWorkday(filterSenior = true) {
                     category,
                     salary: null,
                     description: null,
-                    posted_at: new Date().toISOString(),
+                    // Real posting date from "Posted N Days Ago". Falling back to
+                    // now() only when Workday omits it — stamping now() on every
+                    // poll made each job look like a fresh repost every day.
+                    posted_at: parseWorkdayPostedOn(posting.postedOn) || new Date().toISOString(),
+                    posted_at_estimated: isWorkdayPostedOnCapped(posting.postedOn),
                 });
             }
 
             if (postings.length > 0) {
                 console.log(`✅ Workday [${company}]: ${postings.length} postings`);
             }
-            await sleep(600);
         } catch (err) {
             console.error(`❌ Workday [${company}]: ${err.message}`);
         }
-    }
+    });
 
     return { jobs, polledCompanies, seenUrls };
 }

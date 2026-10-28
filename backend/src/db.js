@@ -147,6 +147,28 @@ export async function initDb() {
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS missed_count INTEGER NOT NULL DEFAULT 0`);
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ`);
+    // Data repairs for scraper bugs (idempotent — each matches nothing once fixed):
+    //  - Workday links once omitted the career-site segment (https://{host}/job/...),
+    //    which 404s. Those URLs can never be refreshed, so retire them.
+    await pool.query(
+        `UPDATE jobs SET closed_at = now()
+         WHERE source = 'workday' AND closed_at IS NULL AND status NOT IN ('saved', 'applied')
+           AND url ~ '^https://[^/]+\\.myworkdayjobs\\.com/job/'`
+    );
+    //  - Unix-second timestamps were parsed as milliseconds (dates in Jan 1970).
+    //    Clear them so the next scrape writes the real date without it being
+    //    mistaken for a repost.
+    await pool.query(`UPDATE jobs SET posted_at = NULL WHERE posted_at < '2000-01-01'`);
+    //  - The Lever scraper's `commitment=fulltime` filter matched nothing, so every
+    //    polled Lever board looked empty and the closer retired real listings.
+    //    Reopen them once; anything genuinely gone is re-closed after two polls.
+    const leverFix = await pool.query(
+        `INSERT INTO settings (key, value) VALUES ('migration_lever_reopen_2026_10', 'done')
+         ON CONFLICT (key) DO NOTHING`
+    );
+    if (leverFix.rowCount > 0) {
+        await pool.query(`UPDATE jobs SET closed_at = NULL, missed_count = 0 WHERE source = 'lever' AND closed_at IS NOT NULL`);
+    }
     for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
         await pool.query(
             'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING',
@@ -205,7 +227,9 @@ export async function insertJob(job) {
 
     const existing = existingRes.rows[0];
     const oldPosted = parseTs(existing.posted_at);
-    const newPosted = parseTs(job.posted_at);
+    // An estimated date (e.g. Workday "30+ Days Ago") drifts between polls:
+    // never compare it for reposts or let it overwrite the stored date.
+    const newPosted = job.posted_at_estimated ? null : parseTs(job.posted_at);
     const portalRepost = isPortalDateRepost(oldPosted, newPosted);
     const relistRepost = isRelistRepost(existing.scraped_at);
     const isRepost = portalRepost || relistRepost;
@@ -237,7 +261,7 @@ export async function insertJob(job) {
                 job.category,
                 job.salary ?? null,
                 job.description ?? null,
-                job.posted_at ?? null,
+                job.posted_at_estimated ? null : (job.posted_at ?? null),
                 previousPosted,
                 job.url,
                 job.source,
@@ -267,7 +291,7 @@ export async function insertJob(job) {
             job.category,
             job.salary ?? null,
             job.description ?? null,
-            job.posted_at ?? null,
+            job.posted_at_estimated ? null : (job.posted_at ?? null),
             job.url,
             job.source,
         ]

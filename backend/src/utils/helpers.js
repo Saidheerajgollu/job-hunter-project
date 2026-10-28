@@ -39,6 +39,77 @@ export function parsePostedAt(text, fallback = new Date().toISOString()) {
 }
 
 /**
+ * Normalize any date-ish value from a job API into an ISO string.
+ * Handles ISO strings, millisecond timestamps, and unix-second timestamps
+ * (number or numeric string — e.g. Himalayas' pubDate). `new Date(seconds)`
+ * silently lands in January 1970, which buries the job in every date-sorted
+ * view, so seconds are detected by magnitude (< 1e11 ≈ year 5138 in seconds).
+ * Returns `fallback` for missing/unparseable input instead of throwing.
+ */
+export function toIsoDate(value, fallback = new Date().toISOString()) {
+    if (value === null || value === undefined || value === '') return fallback;
+    let input = value;
+    if (typeof input === 'string' && /^\d+$/.test(input.trim())) input = Number(input.trim());
+    if (typeof input === 'number') {
+        if (!Number.isFinite(input) || input <= 0) return fallback;
+        input = input < 1e11 ? input * 1000 : input;
+    }
+    const d = new Date(input);
+    return Number.isNaN(d.getTime()) ? fallback : d.toISOString();
+}
+
+/**
+ * Parse Workday's relative `postedOn` text ("Posted Today", "Posted Yesterday",
+ * "Posted 10 Days Ago", "Posted 30+ Days Ago") into an ISO date.
+ * Returns null when the text is missing/unknown so callers don't stamp a
+ * fresh `now()` on every poll (which made every Workday job look reposted daily).
+ */
+export function parseWorkdayPostedOn(text, now = new Date()) {
+    if (!text) return null;
+    const lower = String(text).toLowerCase();
+    let days = null;
+    if (lower.includes('today')) days = 0;
+    else if (lower.includes('yesterday')) days = 1;
+    else {
+        const m = lower.match(/(\d+)\+?\s*days?/);
+        if (m) days = parseInt(m[1], 10);
+    }
+    if (days === null) return null;
+    return new Date(now.getTime() - days * 86400000).toISOString();
+}
+
+/**
+ * True when Workday's postedOn is open-ended ("Posted 30+ Days Ago"). The
+ * date we derive from it slides forward a day on every daily poll, so it must
+ * not overwrite a stored date or trigger repost detection.
+ */
+export function isWorkdayPostedOnCapped(text) {
+    return /\d+\+/.test(String(text || ''));
+}
+
+/**
+ * Run `fn` over `items` with at most `limit` in flight; results keep input order.
+ * A rejected task leaves its Error in that slot rather than aborting the batch —
+ * one slow/broken company board must never stall or kill the whole poll.
+ */
+export async function mapWithConcurrency(items, limit, fn) {
+    const results = new Array(items.length);
+    let next = 0;
+    async function worker() {
+        while (next < items.length) {
+            const i = next++;
+            try {
+                results[i] = await fn(items[i], i);
+            } catch (err) {
+                results[i] = err instanceof Error ? err : new Error(String(err));
+            }
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+    return results;
+}
+
+/**
  * Check if a job title looks like a senior/experienced-only role
  */
 export function isSeniorRole(title) {
@@ -48,6 +119,8 @@ export function isSeniorRole(title) {
         '5+ years', '7+ years', '10+ years',
     ];
     const lower = title.toLowerCase();
+    // "Sr. Engineer" / "Sr Engineer" — word-bounded so "Srinagar" etc. don't match.
+    if (/\bsr\.?\s/.test(lower)) return true;
     return seniorKeywords.some(kw => lower.includes(kw));
 }
 
@@ -200,6 +273,35 @@ export function getNonUsLocationPgRegex() {
     return `\\m(${escaped})\\M`;
 }
 
+/**
+ * Words that mean "this role has a US location" even when the same string also
+ * names a non-US city (multi-office postings like "San Francisco | London").
+ */
+export const US_LOCATION_TERMS = [
+    'united states', 'usa', 'us', 'nyc', 'new york', 'san francisco', 'bay area',
+    'silicon valley', 'seattle', 'austin', 'boston', 'chicago', 'los angeles',
+    'denver', 'atlanta',
+];
+
+// State codes that double as ISO country codes (IN=India, DE=Germany,
+// IL=Israel, CO=Colombia, ...) can't overrule a non-US place name:
+// "Bengaluru, IN" must stay non-US.
+const AMBIGUOUS_STATE_CODES = new Set(['IN', 'DE', 'IL', 'CO', 'ME', 'PA', 'AR', 'ID', 'LA', 'MA', 'AL', 'GA', 'SC', 'NE', 'MT', 'MN']);
+const UNAMBIGUOUS_STATE_ABBREVS = US_STATE_ABBREVS.split('|').filter(c => !AMBIGUOUS_STATE_CODES.has(c)).join('|');
+const US_STATE_SIGNAL_SRC = `(,|\\||\\-)\\s*(${UNAMBIGUOUS_STATE_ABBREVS})\\s*($|,|\\||\\-)`;
+const usStateOverrideRegex = new RegExp(US_STATE_SIGNAL_SRC, 'i');
+
+let _usTermsRegex = null;
+function usTermsRegex() {
+    if (!_usTermsRegex) _usTermsRegex = new RegExp(`\\b(${US_LOCATION_TERMS.join('|')})\\b`, 'i');
+    return _usTermsRegex;
+}
+
+/** PostgreSQL regex: location names a US place (word terms or ", ST" state code). */
+export function getUsLocationPgRegex() {
+    return `\\m(${US_LOCATION_TERMS.join('|')})\\M|${US_STATE_SIGNAL_SRC}`;
+}
+
 function hasUsStateSignal(location = '') {
     return new RegExp(`(,|\\||\\-)\\s*(${US_STATE_ABBREVS})\\s*($|,|\\||\\-)`, 'i').test(location);
 }
@@ -215,9 +317,12 @@ export function isUSCompatible(location = '') {
 
     if (/\b(united states|u\.s\.a?\.?|usa)\b/.test(loc)) return true;
     if (/\b(remote.*\b(us|usa|united states)\b|\b(us|usa|united states)\b.*remote)\b/.test(loc)) return true;
-    if (hasUsStateSignal(location)) return true;
+    if (usTermsRegex().test(loc)) return true;
 
-    if (nonUsLocationRegex().test(loc)) return false;
+    // A non-US place name wins unless an unambiguous US state code also appears
+    // (mirrors the feed's SQL filter in roleFilters.js).
+    if (nonUsLocationRegex().test(loc)) return usStateOverrideRegex.test(location);
+    if (hasUsStateSignal(location)) return true;
 
     // Legacy substring patterns (multi-word phrases with punctuation)
     const nonUSPhrases = [

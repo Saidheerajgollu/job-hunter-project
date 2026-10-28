@@ -47,4 +47,48 @@ describe('discoverATSCompanies', () => {
         expect(result.lever).toEqual(['netflix']);
         expect(result.ashby).toEqual(['linear']);
     });
+
+    it('extracts SmartRecruiters slugs from the jobs.smartrecruiters.com host SimplifyJobs actually uses', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => [{ url: 'https://jobs.smartrecruiters.com/AristaNetworks/744000136204119' }],
+        }));
+
+        const { discoverATSCompanies } = await import('./discoverCompanies.js');
+        const result = await discoverATSCompanies();
+
+        expect(result.smartrecruiters).toEqual(['AristaNetworks']);
+    });
+
+    it('extracts the newer job-boards.greenhouse.io host', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => [{ url: 'https://job-boards.greenhouse.io/anthropic/jobs/4020305008' }],
+        }));
+
+        const { discoverATSCompanies } = await import('./discoverCompanies.js');
+        const result = await discoverATSCompanies();
+
+        expect(result.greenhouse).toEqual(['anthropic']);
+    });
+
+    it('extracts Workday tenants as career URLs (one per tenant + site), skipping locale segments', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => [
+                { url: 'https://generalmotors.wd5.myworkdayjobs.com/Careers_GM/job/Sunnyvale/Software-Engineer_JR-1', company_name: 'General Motors', active: true },
+                { url: 'https://generalmotors.wd5.myworkdayjobs.com/en-US/Careers_GM/job/Austin/Data-Engineer_JR-2', company_name: 'General Motors', active: true },
+                { url: 'https://globalhr.wd5.myworkdayjobs.com/rec_rtx_ext_gateway/job/X/Y_01790413', company_name: 'RTX', active: true },
+                { url: 'https://oldco.wd1.myworkdayjobs.com/Ext/job/Z_1', company_name: 'OldCo', active: false },
+            ],
+        }));
+
+        const { discoverATSCompanies } = await import('./discoverCompanies.js');
+        const result = await discoverATSCompanies();
+
+        expect(result.workday).toEqual([
+            { company: 'General Motors', careerUrl: 'https://generalmotors.wd5.myworkdayjobs.com/Careers_GM' },
+            { company: 'RTX', careerUrl: 'https://globalhr.wd5.myworkdayjobs.com/rec_rtx_ext_gateway' },
+        ]);
+    });
 });

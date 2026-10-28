@@ -60,4 +60,35 @@ describe('scrapeLever', () => {
         expect(jobs).toEqual([]);
         expect(polledCompanies).toContain('Quiet Co');
     });
+
+    it('does not send the exact-match commitment=fulltime filter (Lever stores "Full-time", so it matched nothing)', async () => {
+        const urls = [];
+        mockFetch(async (url) => {
+            urls.push(String(url));
+            return { ok: true, json: async () => ([]) };
+        });
+
+        await scrapeLever(true, ['palantir']);
+
+        expect(urls.length).toBeGreaterThan(0);
+        expect(urls.every(u => !u.includes('commitment='))).toBe(true);
+    });
+
+    it('keeps full-time roles, skips internships, but records every posting in seenUrls', async () => {
+        mockFetch(async (url) => {
+            if (!String(url).includes('/acme?')) return { ok: true, json: async () => ([]) };
+            return {
+                ok: true,
+                json: async () => ([
+                    { id: 'a', text: 'Software Engineer', hostedUrl: 'https://jobs.lever.co/acme/a', categories: { commitment: 'Full-time', location: 'Austin, TX' }, createdAt: 1786469891368 },
+                    { id: 'b', text: 'Software Engineer Intern', hostedUrl: 'https://jobs.lever.co/acme/b', categories: { commitment: 'Internship', location: 'Austin, TX' }, createdAt: 1786469891368 },
+                ]),
+            };
+        });
+
+        const { jobs, seenUrls } = await scrapeLever(true, ['acme']);
+
+        expect(jobs.map(j => j.url)).toEqual(['https://jobs.lever.co/acme/a']);
+        expect(seenUrls).toEqual(expect.arrayContaining(['https://jobs.lever.co/acme/a', 'https://jobs.lever.co/acme/b']));
+    });
 });

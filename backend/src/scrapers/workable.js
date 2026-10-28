@@ -6,7 +6,7 @@
  * API: https://www.workable.com/api/accounts/{slug}?details=true
  */
 
-import { isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
+import { isSeniorRole, sleep, classifyCategory, mapWithConcurrency } from '../utils/helpers.js';
 import { fetchWorkable as fetchPostings } from '../watchers/atsFetchers.js';
 
 const WORKABLE_COMPANIES = [
@@ -30,13 +30,15 @@ function mergeCompanies(seedList, extraSlugs) {
     return [...byKey.values()];
 }
 
+const CONCURRENCY = 8; // boards fetched in parallel
+
 export async function scrapeWorkable(filterSenior = true, extraCompanies = []) {
     const jobs = [];
     const polledCompanies = [];
     const seenUrls = [];
     const allCompanies = mergeCompanies(WORKABLE_COMPANIES, extraCompanies);
 
-    for (const company of allCompanies) {
+    await mapWithConcurrency(allCompanies, CONCURRENCY, async (company) => {
         try {
             const postings = await fetchPostings(company.slug);
             polledCompanies.push(company.name);
@@ -68,13 +70,13 @@ export async function scrapeWorkable(filterSenior = true, extraCompanies = []) {
             if (postings.length > 0) {
                 console.log(`✅ Workable [${company.name}]: ${jobs.length} tech roles so far (${postings.length} total)`);
             }
-            await sleep(250);
+            await sleep(100);
         } catch (err) {
             if (!err.message?.includes('404')) {
                 console.error(`❌ Workable [${company.name}]: ${err.message}`);
             }
         }
-    }
+    });
 
     return { jobs, polledCompanies, seenUrls };
 }

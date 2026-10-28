@@ -4,7 +4,7 @@
  * No browser needed — pure HTTP fetch.
  */
 
-import { makeJobId, isSeniorRole, sleep, classifyCategory } from '../utils/helpers.js';
+import { makeJobId, isSeniorRole, sleep, classifyCategory, mapWithConcurrency } from '../utils/helpers.js';
 
 const LEVER_COMPANIES = [
     // AI / ML
@@ -26,27 +26,32 @@ const LEVER_COMPANIES = [
     'citadel', 'citadelsecurities', 'sig', 'drw', 'imc',
 ];
 
+const CONCURRENCY = 8; // boards fetched in parallel
+
 export async function scrapeLever(filterSenior = true, extraCompanies = []) {
     const jobs = [];
     const polledCompanies = [];
     const seenUrls = [];
     const allCompanies = [...new Set([...LEVER_COMPANIES, ...extraCompanies])];
 
-    for (const company of allCompanies) {
+    await mapWithConcurrency(allCompanies, CONCURRENCY, async (company) => {
         try {
-            const url = `https://api.lever.co/v0/postings/${company}?mode=json&commitment=fulltime`;
+            // No server-side commitment filter: it's an exact match against values
+            // like "Full-time", so the old `commitment=fulltime` returned nothing
+            // for every board. Internships are skipped client-side below instead.
+            const url = `https://api.lever.co/v0/postings/${company}?mode=json`;
             const resp = await fetch(url, {
                 headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)' },
-                signal: AbortSignal.timeout(10000),
+                signal: AbortSignal.timeout(20000),
             });
 
             if (!resp.ok) {
                 if (resp.status !== 404) console.warn(`⚠️ Lever ${company}: HTTP ${resp.status}`);
-                continue;
+                return;
             }
 
             const postings = await resp.json();
-            if (!Array.isArray(postings)) continue;
+            if (!Array.isArray(postings)) return;
 
             const companyName = company.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
             polledCompanies.push(companyName);
@@ -55,6 +60,8 @@ export async function scrapeLever(filterSenior = true, extraCompanies = []) {
             for (const posting of postings) {
                 const jobUrl = posting.hostedUrl || `https://jobs.lever.co/${company}/${posting.id}`;
                 seenUrls.push(jobUrl);
+
+                if (/intern/i.test(posting.categories?.commitment || '')) continue;
 
                 const title = posting.text || '';
                 const description = posting.descriptionPlain?.slice(0, 500) || '';
@@ -85,13 +92,13 @@ export async function scrapeLever(filterSenior = true, extraCompanies = []) {
             if (postings.length) {
                 console.log(`✅ Lever [${company}]: ${companyCount} tech roles (${postings.length} total)`);
             }
-            await sleep(300);
+            await sleep(100);
         } catch (err) {
             if (!err.message.includes('404')) {
                 console.error(`❌ Lever [${company}]: ${err.message}`);
             }
         }
-    }
+    });
 
     return { jobs, polledCompanies, seenUrls };
 }

@@ -15,7 +15,7 @@ import { scrapeWorkday } from './scrapers/workday.js';
 import { scrapeSmartRecruiters } from './scrapers/smartrecruiters.js';
 import { scrapeWorkable } from './scrapers/workable.js';
 import { scrapeRecruitee } from './scrapers/recruitee.js';
-import { discoverATSCompanies } from './utils/discoverCompanies.js';
+import { discoverATSCompanies, emptyDiscovery } from './utils/discoverCompanies.js';
 import { insertJob, closeStaleJobs, getAllSettings } from './db.js';
 import { isEligibleJob } from './utils/helpers.js';
 
@@ -48,9 +48,7 @@ export async function runFastAtsPoll() {
     const settings = await getAllSettings();
     const filterSenior = settings.filter_exclude_senior !== 'false';
 
-    const discovered = await discoverATSCompanies().catch(() => ({
-        greenhouse: [], lever: [], ashby: [], smartrecruiters: [], workable: [], recruitee: [],
-    }));
+    const discovered = await discoverATSCompanies().catch(() => emptyDiscovery());
 
     const sources = [
         // closerEnabled: false means this source's fetcher returns a
@@ -61,7 +59,9 @@ export async function runFastAtsPoll() {
         { name: 'Greenhouse',      source: 'greenhouse',      closerEnabled: true,  fn: () => scrapeGreenhouse(filterSenior, discovered.greenhouse) },
         { name: 'Lever',           source: 'lever',           closerEnabled: true,  fn: () => scrapeLever(filterSenior, discovered.lever) },
         { name: 'Ashby',           source: 'ashby',           closerEnabled: true,  fn: () => scrapeAshby(filterSenior, discovered.ashby) },
-        { name: 'Workday',         source: 'workday',         closerEnabled: false, fn: () => scrapeWorkday(filterSenior) },
+        // Workday must stay closerEnabled:false — it's keyword search capped at
+        // 3 pages/term, not a full board listing, and names can collide across tenants.
+        { name: 'Workday',         source: 'workday',         closerEnabled: false, fn: () => scrapeWorkday(filterSenior, discovered.workday) },
         { name: 'SmartRecruiters', source: 'smartrecruiters', closerEnabled: false, fn: () => scrapeSmartRecruiters(filterSenior, discovered.smartrecruiters) },
         { name: 'Workable',        source: 'workable',        closerEnabled: true,  fn: () => scrapeWorkable(filterSenior, discovered.workable) },
         { name: 'Recruitee',       source: 'recruitee',       closerEnabled: true,  fn: () => scrapeRecruitee(filterSenior, discovered.recruitee) },

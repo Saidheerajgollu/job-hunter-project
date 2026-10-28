@@ -9,7 +9,7 @@
  * company's own career portal, and typically well before aggregators index them.
  */
 
-import { makeJobId } from '../utils/helpers.js';
+import { makeJobId, parseWorkdayPostedOn, isWorkdayPostedOnCapped } from '../utils/helpers.js';
 import { parseJobPostings, formatJobLocation } from '../utils/schemaOrgJobPostings.js';
 
 const UA = 'Mozilla/5.0 (compatible; JobHunterPro/1.0)';
@@ -233,29 +233,52 @@ export function parseWorkdayUrl(careerUrl) {
     return { host, tenant, site };
 }
 
-async function fetchWorkday(careerUrl) {
-    const wd = parseWorkdayUrl(careerUrl);
-    if (!wd) throw new Error('Workday: could not parse tenant/site from career URL');
+/** Workday's CXS search API rejects (HTTP 400) any page size above 20. */
+export const WORKDAY_PAGE_SIZE = 20;
 
+/**
+ * Public job link for a Workday posting. The CXS `externalPath` ("/job/...")
+ * is relative to the career *site*, not the host — dropping the site segment
+ * yields a 404, so it must be https://{host}/{site}{externalPath}.
+ */
+export function workdayJobUrl(wd, externalPath) {
+    return `https://${wd.host}/${wd.site}${externalPath}`;
+}
+
+/** One page of a Workday CXS search. Throws on a non-OK response. */
+export async function fetchWorkdayPage(wd, { searchText = '', offset = 0, timeoutMs = TIMEOUT + 3000 } = {}) {
     const endpoint = `https://${wd.host}/wday/cxs/${wd.tenant}/${wd.site}/jobs`;
     const resp = await fetch(endpoint, {
         method: 'POST',
         headers: { 'User-Agent': UA, 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify({ appliedFacets: {}, limit: 50, offset: 0, searchText: '' }),
-        signal: AbortSignal.timeout(TIMEOUT + 3000),
+        body: JSON.stringify({ appliedFacets: {}, limit: WORKDAY_PAGE_SIZE, offset, searchText }),
+        signal: AbortSignal.timeout(timeoutMs),
     });
     if (!resp.ok) throw new Error(`Workday HTTP ${resp.status}`);
     const data = await resp.json();
-    return (data.jobPostings || []).map(j => {
-        const url = j.externalPath ? `https://${wd.host}${j.externalPath}` : careerUrl;
+    return data.jobPostings || [];
+}
+
+async function fetchWorkday(careerUrl) {
+    const wd = parseWorkdayUrl(careerUrl);
+    if (!wd) throw new Error('Workday: could not parse tenant/site from career URL');
+
+    // Newest-first listing; 3 pages (60 postings) is plenty to diff for new roles.
+    const postings = [];
+    for (let page = 0; page < 3; page++) {
+        const batch = await fetchWorkdayPage(wd, { offset: page * WORKDAY_PAGE_SIZE });
+        postings.push(...batch);
+        if (batch.length < WORKDAY_PAGE_SIZE) break;
+    }
+    return postings.map(j => {
+        const url = j.externalPath ? workdayJobUrl(wd, j.externalPath) : careerUrl;
         return {
             id: makeJobId(url),
             title: j.title || '',
             url,
             location: j.locationsText || 'US',
-            // Workday exposes postedOn as a human string ("Posted 3 Days Ago"),
-            // so we can't trust it as a date — diffing is by id anyway.
-            posted_at: new Date().toISOString(),
+            posted_at: parseWorkdayPostedOn(j.postedOn) || new Date().toISOString(),
+            posted_at_estimated: isWorkdayPostedOnCapped(j.postedOn),
             source: 'workday',
         };
     });
