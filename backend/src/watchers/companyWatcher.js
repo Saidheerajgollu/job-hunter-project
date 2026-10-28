@@ -9,8 +9,10 @@
  * index them. That delta is the "be first" edge.
  *
  * Supported ATS: Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable,
- * Recruitee. For truly custom pages it first tries to discover an embedded ATS;
- * only if that fails does it fall back to HTML hash-diffing.
+ * Recruitee. For custom pages it first tries to discover an embedded ATS; if
+ * that fails it matches the company by name against the job feed, which every
+ * scraper (big-company career sites, the wide ATS sweep, SimplifyJobs, ...)
+ * already fills.
  */
 
 import crypto from 'crypto';
@@ -23,12 +25,15 @@ import {
     insertWatchNotification,
     insertJob,
     getAllSettings,
+    getOpenCompanyNames,
+    getOpenJobsForCompanies,
 } from '../db.js';
 import { sendPushToAll } from '../utils/pushNotifications.js';
 import { classifyCategory, isSeniorRole, sleep, isEligibleJob } from '../utils/helpers.js';
 import { matchesTechWatchRole } from '../utils/roleFilters.js';
 import { fetchAtsJobs, isSupportedAts, resolveEmbeddedAts } from './atsFetchers.js';
 import { detectATS } from '../utils/atsDetector.js';
+import { companyNameKeys, buildCompanyIndex } from '../utils/companyNames.js';
 
 // ── Role Matching ─────────────────────────────────────────────────────────────
 
@@ -40,46 +45,27 @@ function matchesWatchJob(job, watchRoles, filterSenior) {
     return isEligibleJob({ ...job, category });
 }
 
-// ── Custom page monitoring (last-resort when no ATS or schema.org data is found) ──
+// ── Custom companies: match by name against the job feed ──────────────────────
 
-/**
- * Raw-HTML hash-diff monitor for genuinely custom career pages — no known ATS,
- * no schema.org JobPosting markup, just a bespoke page. Only tells you "something
- * changed", not what changed, since there's no structured data to parse.
- */
-async function handleCustomHash(company) {
-    if (!company.career_url) return;
-    const resp = await fetch(company.career_url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobHunterPro/1.0)' },
-        signal: AbortSignal.timeout(15000),
-    });
-    if (!resp.ok) throw new Error(`Career page HTTP ${resp.status}`);
-    const html = await resp.text();
-    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-    const content = bodyMatch ? bodyMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : html;
-    const newHash = crypto.createHash('sha256').update(content).digest('hex');
-    const changed = !!company.last_job_hash && company.last_job_hash !== newHash;
-    await updateWatchedCompanyState({ last_job_hash: newHash, last_job_ids: '[]', active_jobs_count: 0, id: company.id });
+// Prefix on last_job_hash for feed-matched state. A company coming from the old
+// HTML hash-diff mode has a page hash instead, so its first feed run is stored
+// silently rather than alerting on every job it already had.
+const FEED_HASH_PREFIX = 'feed:';
 
-    if (changed) {
-        await sendPushToAll({
-            title: `Career page changed — ${company.name}`,
-            body: 'New postings may have been added. Open their career page to check.',
-            url: company.career_url,
-            company: company.name,
-        });
-        await insertWatchNotification({ company_id: company.id, company_name: company.name, job_title: 'Career page update', job_url: company.career_url });
-        await incrementWatchNotifyCount(company.id);
-    }
+export async function handleFeedMatch(company, watchRoles, filterSenior, companyIndex) {
+    const names = [...new Set(companyNameKeys(company.name).flatMap(key => companyIndex.get(key) || []))];
+    const jobs = await getOpenJobsForCompanies(names);
+    const state = company.last_job_hash?.startsWith(FEED_HASH_PREFIX) ? company : { ...company, last_job_hash: null };
+    return processAtsJobs(state, jobs, watchRoles, filterSenior, { hashPrefix: FEED_HASH_PREFIX, persist: false });
 }
 
 // ── Shared diff + notify for ATS-backed companies ──────────────────────────────
 
-async function processAtsJobs(company, allJobs, watchRoles, filterSenior) {
+export async function processAtsJobs(company, allJobs, watchRoles, filterSenior, { hashPrefix = '', persist = true } = {}) {
     const matchingJobs = allJobs.filter(j => matchesWatchJob(j, watchRoles, filterSenior));
 
     const sortedIds = matchingJobs.map(j => j.id).sort();
-    const newHash = crypto.createHash('sha256').update(sortedIds.join(',')).digest('hex');
+    const newHash = hashPrefix + crypto.createHash('sha256').update(sortedIds.join(',')).digest('hex');
 
     // First run: store state without notifying (don't flood existing jobs).
     if (!company.last_job_hash) {
@@ -96,8 +82,8 @@ async function processAtsJobs(company, allJobs, watchRoles, filterSenior) {
     const previousIds = new Set(JSON.parse(company.last_job_ids || '[]'));
     const newJobs = matchingJobs.filter(j => !previousIds.has(j.id));
 
-    // Persist new jobs into the main feed too.
-    for (const job of newJobs) {
+    // Persist new jobs into the main feed too (feed-matched jobs are already there).
+    for (const job of persist ? newJobs : []) {
         const category = classifyCategory(job.title);
         if (!isEligibleJob({ ...job, category })) continue;
         try {
@@ -161,7 +147,7 @@ async function runAtsWatch(company, watchRoles, filterSenior) {
     return processAtsJobs(company, jobs, watchRoles, filterSenior);
 }
 
-async function watchOneCompany(company, filterSenior) {
+async function watchOneCompany(company, filterSenior, companyIndex) {
     const watchRoles = company.watch_roles || null;
 
     // Direct ATS — the fast, reliable path (free API calls, run every cycle).
@@ -213,8 +199,8 @@ async function watchOneCompany(company, filterSenior) {
         }
     }
 
-    // Last resort: genuinely custom page, no structured data — hash-diff only.
-    return handleCustomHash(company);
+    // No ATS found: match the company by name against the job feed.
+    return handleFeedMatch(company, watchRoles, filterSenior, companyIndex);
 }
 
 // ── Public Entry Point ────────────────────────────────────────────────────────
@@ -228,10 +214,11 @@ export async function runCompanyWatcher() {
     const filterSenior = settings.filter_exclude_senior !== 'false';
 
     console.log(`\n👁  Company Watcher — checking ${companies.length} companies...`);
+    const companyIndex = buildCompanyIndex(await getOpenCompanyNames());
 
     for (const company of companies) {
         try {
-            await watchOneCompany(company, filterSenior);
+            await watchOneCompany(company, filterSenior, companyIndex);
         } catch (err) {
             console.error(`❌ Watcher [${company.name}]: ${err.message}`);
             await updateWatchedCompanyError(err.message.slice(0, 200), company.id);

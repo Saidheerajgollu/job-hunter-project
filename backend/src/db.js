@@ -156,6 +156,8 @@ export async function initDb() {
     const eligSql = usEligibilityCondition(eligParams);
     await pool.query(`UPDATE jobs SET us_ineligible = NOT (${eligSql}) WHERE us_ineligible IS NULL`, eligParams);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_jobs_portal_date ON jobs ((${PORTAL_DATE_SQL}) DESC)`);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_jobs_dedup ON jobs (${DEDUP_KEY_SQL}) WHERE closed_at IS NULL`);
+    await closeDuplicateJobs();
     // Data repairs for scraper bugs (idempotent — each matches nothing once fixed):
     //  - Workday links once omitted the career-site segment (https://{host}/job/...),
     //    which 404s. Those URLs can never be refreshed, so retire them.
@@ -198,6 +200,46 @@ function parseTs(value) {
     return Number.isNaN(d.getTime()) ? null : d;
 }
 
+// Same role reported by two sources under different URLs (e.g. SimplifyJobs and
+// the company's own board). One open row per key is kept.
+const DEDUP_KEY_SQL = `lower(company), lower(title), lower(COALESCE(location, ''))`;
+// Which copy to keep: the company's own ATS, then its career site, then aggregators.
+const SOURCE_RANK_SQL = `CASE
+    WHEN source IN ('greenhouse','lever','ashby','workday','smartrecruiters','workable','recruitee') THEN 0
+    WHEN source IN ('amazon','apple','google','eightfold','bytedance','oraclecloud') THEN 1
+    ELSE 2 END`;
+
+/** Close all but the best copy of each duplicated open role. Idempotent. */
+export async function closeDuplicateJobs() {
+    const res = await pool.query(`
+      UPDATE jobs SET closed_at = now()
+      WHERE id IN (
+        SELECT id FROM (
+          SELECT id, row_number() OVER (
+            PARTITION BY ${DEDUP_KEY_SQL}
+            ORDER BY ${SOURCE_RANK_SQL}, scraped_at DESC
+          ) AS rn
+          FROM jobs WHERE closed_at IS NULL
+        ) ranked WHERE rn > 1
+      )`);
+    return res.rowCount;
+}
+
+/**
+ * Close jobs no source has reported for `days` days. Sampled sources
+ * (SimplifyJobs, job boards, career-site search) never mark a listing closed,
+ * so without this their dead listings stayed "open" forever.
+ * A source that reports the job again reopens it (see insertJob).
+ */
+export async function expireUnseenJobs(days = 7) {
+    const res = await pool.query(
+        `UPDATE jobs SET closed_at = now()
+         WHERE closed_at IS NULL AND scraped_at < now() - make_interval(days => $1::int)`,
+        [days]
+    );
+    return res.rowCount;
+}
+
 /** Portal posted date moved forward — likely a repost on the same URL. */
 function isPortalDateRepost(oldPosted, newPosted) {
     if (!newPosted) return false;
@@ -223,6 +265,13 @@ export async function insertJob(job) {
     );
 
     if (existingRes.rows.length === 0) {
+        // Same role already open under another URL (another source) — keep one.
+        const dup = await pool.query(
+            `SELECT 1 FROM jobs WHERE closed_at IS NULL AND (${DEDUP_KEY_SQL}) = (lower($1), lower($2), lower(COALESCE($3, ''))) LIMIT 1`,
+            [job.company, job.title, job.location ?? null]
+        );
+        if (dup.rows.length) return false;
+
         const res = await pool.query(
             `INSERT INTO jobs (id, title, company, location, url, source, category, salary, description, posted_at, status, is_new, last_seen_at, missed_count, closed_at, us_ineligible)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',true, now(), 0, NULL, $11)`,
@@ -263,7 +312,11 @@ export async function insertJob(job) {
                is_new = true,
                last_seen_at = CASE WHEN source = $10 THEN now() ELSE last_seen_at END,
                missed_count = CASE WHEN source = $10 THEN 0 ELSE missed_count END,
-               closed_at = CASE WHEN source = $10 THEN NULL ELSE closed_at END
+               closed_at = CASE WHEN source = $10 AND NOT EXISTS (
+                 SELECT 1 FROM jobs d WHERE d.closed_at IS NULL AND d.url <> jobs.url
+                   AND lower(d.company) = lower(jobs.company) AND lower(d.title) = lower(jobs.title)
+                   AND lower(COALESCE(d.location, '')) = lower(COALESCE(jobs.location, '')))
+               THEN NULL ELSE closed_at END
              WHERE url = $9`,
             [
                 job.title,
@@ -295,7 +348,11 @@ export async function insertJob(job) {
            us_ineligible = $10,
            last_seen_at = CASE WHEN source = $9 THEN now() ELSE last_seen_at END,
            missed_count = CASE WHEN source = $9 THEN 0 ELSE missed_count END,
-           closed_at = CASE WHEN source = $9 THEN NULL ELSE closed_at END
+           closed_at = CASE WHEN source = $9 AND NOT EXISTS (
+                 SELECT 1 FROM jobs d WHERE d.closed_at IS NULL AND d.url <> jobs.url
+                   AND lower(d.company) = lower(jobs.company) AND lower(d.title) = lower(jobs.title)
+                   AND lower(COALESCE(d.location, '')) = lower(COALESCE(jobs.location, '')))
+               THEN NULL ELSE closed_at END
          WHERE url = $8`,
         [
             job.title,
@@ -464,6 +521,23 @@ export async function upsertSetting(key, value) {
 }
 
 // ── Watched Companies ─────────────────────────────────────────────────────────
+
+/** Distinct company names among open feed jobs (for watchlist name matching). */
+export async function getOpenCompanyNames() {
+    const res = await pool.query(`SELECT DISTINCT company FROM jobs WHERE closed_at IS NULL AND us_ineligible IS NOT TRUE`);
+    return res.rows.map(r => r.company);
+}
+
+/** Open feed jobs for any of the given exact company names. */
+export async function getOpenJobsForCompanies(names) {
+    if (!names.length) return [];
+    const res = await pool.query(
+        `SELECT id, title, url, location, posted_at, source FROM jobs
+         WHERE company = ANY($1) AND closed_at IS NULL AND us_ineligible IS NOT TRUE`,
+        [names]
+    );
+    return res.rows;
+}
 
 export async function getWatchedCompanies() {
     const res = await pool.query('SELECT * FROM watched_companies ORDER BY created_at DESC');

@@ -51,7 +51,7 @@ const ATS_LABELS: Record<string, string> = {
     icims: 'iCIMS',
     taleo: 'Taleo',
     successfactors: 'SuccessFactors',
-    custom: 'Custom page',
+    custom: 'Matched from feed',
     unknown: 'Unknown',
 };
 
@@ -292,7 +292,12 @@ export function WatchlistPanel() {
         try { setCompanies(await api.getWatchedCompanies()); } catch { /* ignore */ }
     }, []);
 
-    useEffect(() => { load(); }, [load]);
+    // The backend re-checks every company every 30 min; keep the panel current.
+    useEffect(() => {
+        load();
+        const timer = setInterval(load, 2 * 60 * 1000);
+        return () => clearInterval(timer);
+    }, [load]);
 
     async function handleRemove(id: string) {
         await api.removeWatchedCompany(id);

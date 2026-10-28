@@ -22,15 +22,15 @@ Not covered: Meta (its careers site has no public endpoint, so Meta jobs only ar
 
 1. Each title is classified into a role (SWE, frontend, backend, full stack, AI, ML, data science, data engineer, data analyst, DevOps). Non-tech titles are dropped.
 2. Non-US locations and postings that require US citizenship or a security clearance are dropped.
-3. Jobs are deduplicated by URL. If a known job comes back with a newer posting date, it is flagged as reposted.
-4. For ATS boards that return their full listing, a job missing from two checks in a row is marked closed and leaves the feed.
+3. Jobs are deduplicated by URL, and by company + title + location across sources (the company's own ATS copy is kept over an aggregator's). If a known job comes back with a newer posting date, it is flagged as reposted.
+4. For ATS boards that return their full listing, a job missing from two checks in a row is marked closed and leaves the feed. Any job that no source has reported for 7 days is closed too.
 
 ## Dashboard features
 
 - Filter by role, source, experience level (from the title), posting age (24h / 7 days / 30 days), salary listed, and text search
 - Stats for open jobs, jobs posted in the last 24 hours and 7 days, companies, and the last sync
 - The page refreshes on its own (stats every 30 seconds, the job list every 5 minutes)
-- Company watchlist: add a company (its ATS is detected automatically) and get browser push alerts when it posts a matching role
+- Company watchlist: add a company and get browser push alerts when it posts a matching role. If its ATS is found, the board is checked directly every 30 minutes; otherwise the company is matched by name against the jobs all the scrapers collect
 - Watchlist presets for Bay Area, Seattle, and NYC/NJ companies, plus companies found in Web Data Commons' schema.org job data
 - Settings page: hide senior roles (off by default) and set the navbar label
 
