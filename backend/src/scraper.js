@@ -15,6 +15,13 @@ import { scrapeWeWorkRemotely } from './scrapers/weworkremotely.js';
 import { scrapeTheMuse } from './scrapers/themuse.js';
 import { scrapeJobicy } from './scrapers/jobicy.js';
 import { scrapeHackerNewsHiring } from './scrapers/hackernews.js';
+import { scrapeAmazon } from './scrapers/amazon.js';
+import { scrapeApple } from './scrapers/apple.js';
+import { scrapeGoogle } from './scrapers/google.js';
+import { scrapeEightfold } from './scrapers/eightfold.js';
+import { scrapeByteDance } from './scrapers/bytedance.js';
+import { scrapeOracleCloud } from './scrapers/oraclecloud.js';
+import { discoverATSCompanies, emptyDiscovery } from './utils/discoverCompanies.js';
 import { insertJob, startScrapeRun, finishScrapeRun, getAllSettings } from './db.js';
 import { isEligibleJob } from './utils/helpers.js';
 
@@ -33,8 +40,17 @@ export async function runScraper() {
     let totalNew = 0;
     const errors = [];
 
+    const discovered = await discoverATSCompanies().catch(() => emptyDiscovery());
+
     // ── API-based scrapers (no browser needed) ─────────────────────────────────
     const apiScrapers = [
+        // ── Big-company career sites that don't use a shared ATS ────────────────
+        { name: 'Amazon',           fn: () => scrapeAmazon(filterSenior) },
+        { name: 'Apple',            fn: () => scrapeApple(filterSenior) },
+        { name: 'Google',           fn: () => scrapeGoogle(filterSenior) },
+        { name: 'Eightfold',        fn: () => scrapeEightfold(filterSenior, discovered.eightfold) },
+        { name: 'TikTok/ByteDance', fn: () => scrapeByteDance(filterSenior) },
+        { name: 'Oracle Cloud',     fn: () => scrapeOracleCloud(filterSenior, discovered.oraclecloud) },
         // ── Community-curated new-grad list (always runs) ───────────────────────
         { name: 'SimplifyJobs',     fn: () => scrapeSimplifyJobs(filterSenior) },
         // ── Free job board APIs (always run) ────────────────────────────────────

@@ -91,4 +91,21 @@ describe('discoverATSCompanies', () => {
             { company: 'RTX', careerUrl: 'https://globalhr.wd5.myworkdayjobs.com/rec_rtx_ext_gateway' },
         ]);
     });
+
+    it('extracts Eightfold and Oracle Cloud HCM career sites from active listings', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => [
+                { url: 'https://qualcomm.eightfold.ai/careers/job/446721579774', company_name: 'Qualcomm', active: true },
+                { url: 'https://ibqbjb.fa.ocs.oraclecloud.com/hcmUI/CandidateExperience/en/sites/Honeywell/job/140055', company_name: 'Honeywell', active: true },
+                { url: 'https://old.eightfold.ai/careers/job/1', company_name: 'Old', active: false },
+            ],
+        }));
+
+        const { discoverATSCompanies } = await import('./discoverCompanies.js');
+        const result = await discoverATSCompanies();
+
+        expect(result.eightfold).toEqual([{ company: 'Qualcomm', host: 'qualcomm.eightfold.ai', domain: 'qualcomm.com' }]);
+        expect(result.oraclecloud).toEqual([{ company: 'Honeywell', host: 'ibqbjb.fa.ocs.oraclecloud.com', site: 'Honeywell' }]);
+    });
 });

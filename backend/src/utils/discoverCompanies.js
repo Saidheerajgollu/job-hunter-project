@@ -11,6 +11,7 @@
  */
 
 import { parseWorkdayUrl } from '../watchers/atsFetchers.js';
+import { parseOracleCareerUrl } from '../scrapers/oraclecloud.js';
 
 const SIMPLIFY_URL =
     'https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json';
@@ -22,7 +23,7 @@ let cacheTime = 0;
 
 /** Empty discovery result — used when SimplifyJobs is unreachable. */
 export function emptyDiscovery() {
-    return { greenhouse: [], lever: [], ashby: [], smartrecruiters: [], workable: [], recruitee: [], workday: [] };
+    return { greenhouse: [], lever: [], ashby: [], smartrecruiters: [], workable: [], recruitee: [], workday: [], eightfold: [], oraclecloud: [] };
 }
 
 export async function discoverATSCompanies() {
@@ -52,6 +53,9 @@ export async function discoverATSCompanies() {
         // Workday: keyed by host+site so one tenant isn't polled twice; value
         // carries a readable company name (the slug is often opaque, e.g. "globalhr").
         const workday = new Map();
+        // Company career sites on Eightfold / Oracle Cloud HCM, keyed by host(+site).
+        const eightfold = new Map();
+        const oraclecloud = new Map();
 
         for (const listing of listings) {
             if (!listing.url) continue;
@@ -81,6 +85,20 @@ export async function discoverATSCompanies() {
             const rc = listing.url.match(/([a-z0-9-]+)\.recruitee\.com/i);
             if (rc) recruitee.add(rc[1].toLowerCase());
 
+            if (listing.active) {
+                // {tenant}.eightfold.ai/careers/job/{id} — domain is the tenant's .com
+                const ef = listing.url.match(/^https?:\/\/([a-z0-9-]+)\.eightfold\.ai\//i);
+                if (ef && !eightfold.has(ef[1].toLowerCase())) {
+                    const slug = ef[1].toLowerCase();
+                    eightfold.set(slug, { company: listing.company_name || slug, host: `${slug}.eightfold.ai`, domain: `${slug}.com` });
+                }
+                // {pod}.fa.{region}.oraclecloud.com/hcmUI/CandidateExperience/en/sites/{site}/job/{id}
+                const oc = parseOracleCareerUrl(listing.url);
+                if (oc && !oraclecloud.has(`${oc.host}/${oc.site}`)) {
+                    oraclecloud.set(`${oc.host}/${oc.site}`, { company: listing.company_name || oc.host, ...oc });
+                }
+            }
+
             // {tenant}.wd{N}.myworkdayjobs.com/[locale/]{site}/job/... — Workday is
             // the single most common ATS in SimplifyJobs listings.
             // Only tenants with a currently-active listing: inactive history
@@ -105,13 +123,15 @@ export async function discoverATSCompanies() {
             workable: [...workable],
             recruitee: [...recruitee],
             workday: [...workday.values()],
+            eightfold: [...eightfold.values()],
+            oraclecloud: [...oraclecloud.values()],
         };
         cacheTime = Date.now();
 
         console.log(
             `🔍 Discovered ${greenhouse.size} Greenhouse | ${lever.size} Lever | ${ashby.size} Ashby | ` +
             `${smartrecruiters.size} SmartRecruiters | ${workable.size} Workable | ${recruitee.size} Recruitee | ` +
-            `${workday.size} Workday companies from SimplifyJobs`
+            `${workday.size} Workday | ${eightfold.size} Eightfold | ${oraclecloud.size} Oracle companies from SimplifyJobs`
         );
         return cache;
     } catch (err) {

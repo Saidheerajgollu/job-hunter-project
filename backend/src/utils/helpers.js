@@ -356,6 +356,47 @@ export const TECH_ROLE_CATEGORIES = [
     'data-science', 'data-engineer', 'data-analyst', 'devops',
 ];
 
+/**
+ * Search terms for company career sites that only offer keyword search
+ * (Amazon, Apple, Google, Eightfold, ByteDance, Oracle). Kept short: each term
+ * costs a request or more per site, and classifyCategory filters afterwards.
+ */
+export const CAREER_SITE_TERMS = [
+    'software engineer',
+    'machine learning',
+    'data engineer',
+    'data scientist',
+    'frontend',
+    'backend',
+];
+
+export const BROWSER_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
+
+/**
+ * fetch() with retry + exponential backoff on 429 / 5xx / network errors.
+ * Big career sites (Microsoft's Eightfold edge especially) rate-limit bursts;
+ * backing off rides through that instead of losing the whole source.
+ * Returns the Response for any other status — callers check resp.ok.
+ */
+export async function fetchWithRetry(url, options = {}, { retries = 3, baseDelayMs = 1000, maxDelayMs = 16000, timeoutMs = 20000 } = {}) {
+    let lastErr;
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const resp = await fetch(url, {
+                ...options,
+                headers: { 'User-Agent': BROWSER_UA, ...(options.headers || {}) },
+                signal: AbortSignal.timeout(timeoutMs),
+            });
+            if (resp.status !== 429 && resp.status < 500) return resp;
+            lastErr = new Error(`HTTP ${resp.status}`);
+        } catch (err) {
+            lastErr = err;
+        }
+        if (attempt < retries) await sleep(Math.min(maxDelayMs, baseDelayMs * 2 ** attempt));
+    }
+    throw lastErr;
+}
+
 /** Search terms for ATS APIs (Workday, etc.) — tech roles only, not new-grad specific. */
 export const TECH_SEARCH_TERMS = [
     'software engineer',
