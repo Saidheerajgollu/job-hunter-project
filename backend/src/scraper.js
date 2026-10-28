@@ -6,7 +6,6 @@
  * API or feed, which keeps the backend light, fast, and reliable on Railway.
  */
 
-import { scrapeDirectCareerPages } from './scrapers/direct.js';
 import { scrapeSimplifyJobs } from './scrapers/simplifyjobs.js';
 import { scrapeAdzuna } from './scrapers/adzuna.js';
 import { scrapeRemoteOK } from './scrapers/remoteok.js';
@@ -15,6 +14,7 @@ import { scrapeHimalayas } from './scrapers/himalayas.js';
 import { scrapeWeWorkRemotely } from './scrapers/weworkremotely.js';
 import { scrapeTheMuse } from './scrapers/themuse.js';
 import { scrapeJobicy } from './scrapers/jobicy.js';
+import { scrapeHackerNewsHiring } from './scrapers/hackernews.js';
 import { insertJob, startScrapeRun, finishScrapeRun, getAllSettings } from './db.js';
 import { isEligibleJob } from './utils/helpers.js';
 
@@ -35,8 +35,7 @@ export async function runScraper() {
 
     // ── API-based scrapers (no browser needed) ─────────────────────────────────
     const apiScrapers = [
-        // ── Core ATS scrapers (always run) ──────────────────────────────────────
-        { name: 'Direct Pages',     fn: () => scrapeDirectCareerPages(filterSenior) },
+        // ── Community-curated new-grad list (always runs) ───────────────────────
         { name: 'SimplifyJobs',     fn: () => scrapeSimplifyJobs(filterSenior) },
         // ── Free job board APIs (always run) ────────────────────────────────────
         { name: 'Adzuna',           fn: () => scrapeAdzuna(filterSenior) },
@@ -46,6 +45,7 @@ export async function runScraper() {
         { name: 'WeWorkRemotely',   fn: () => scrapeWeWorkRemotely(filterSenior) },
         { name: 'The Muse',         fn: () => scrapeTheMuse(filterSenior) },
         { name: 'Jobicy',           fn: () => scrapeJobicy(filterSenior) },
+        { name: 'HN Who is hiring', fn: () => scrapeHackerNewsHiring(filterSenior) },
     ];
 
     // Each scraper runs independently and saves its own results the moment it

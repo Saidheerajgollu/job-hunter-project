@@ -61,6 +61,7 @@ function formatSource(source: string) {
         himalayas: 'Himalayas', weworkremotely: 'WWR',
         smartrecruiters: 'SmartRecruiters', workable: 'Workable', recruitee: 'Recruitee',
         'schema-org': 'Schema.org',
+        hackernews: 'HN Hiring', themuse: 'The Muse', jobicy: 'Jobicy',
     };
     return labels[source] || source;
 }
@@ -169,6 +170,9 @@ const SOURCES = [
     { value: 'adzuna', label: 'Adzuna' },
     { value: 'himalayas', label: 'Himalayas' },
     { value: 'weworkremotely', label: 'WWR' },
+    { value: 'hackernews', label: 'HN Hiring' },
+    { value: 'themuse', label: 'The Muse' },
+    { value: 'jobicy', label: 'Jobicy' },
 ];
 
 function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
