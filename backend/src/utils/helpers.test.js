@@ -90,6 +90,15 @@ describe('isWorkdayPostedOnCapped', () => {
     });
 });
 
+describe('isUsEligible', () => {
+    it('combines the US-location and citizenship checks (stored per job as us_ineligible)', async () => {
+        const { isUsEligible } = await import('./helpers.js');
+        expect(isUsEligible({ title: 'Software Engineer', location: 'Austin, TX' })).toBe(true);
+        expect(isUsEligible({ title: 'Software Engineer', location: 'Berlin, Germany' })).toBe(false);
+        expect(isUsEligible({ title: 'Software Engineer', location: 'Austin, TX', description: 'Must be a U.S. citizen' })).toBe(false);
+    });
+});
+
 describe('isSeniorRole', () => {
     it('catches the "Sr." / "Sr" abbreviation', () => {
         expect(isSeniorRole('Sr. Software Engineer')).toBe(true);
@@ -121,13 +130,4 @@ describe('US location signal (shared by isUSCompatible and the feed SQL filter)'
         expect(isUSCompatible('Tel Aviv, IL')).toBe(false);
     });
 
-    it('the SQL filter lets a US signal override a non-US match instead of hiding the job', async () => {
-        const { buildJobQueryFilters } = await import('./roleFilters.js');
-        const { getUsLocationPgRegex } = await import('./helpers.js');
-        const { where, params } = buildJobQueryFilters({ us_only: true });
-
-        const usIdx = params.indexOf(getUsLocationPgRegex()) + 1;
-        expect(usIdx).toBeGreaterThan(0);
-        expect(where).toContain(`COALESCE(location, '') ~* $${usIdx}`);
-    });
 });

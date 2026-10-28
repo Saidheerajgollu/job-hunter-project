@@ -11,7 +11,8 @@
 
 import 'dotenv/config';
 import pg from 'pg';
-import { buildJobQueryFilters, PORTAL_DATE_SQL } from './utils/roleFilters.js';
+import { buildJobQueryFilters, usEligibilityCondition, PORTAL_DATE_SQL } from './utils/roleFilters.js';
+import { isUsEligible } from './utils/helpers.js';
 import { computeStaleUpdates } from './utils/staleness.js';
 
 const { Pool } = pg;
@@ -31,7 +32,8 @@ const useSSL = process.env.PGSSL !== 'false';
 
 const pool = new Pool({
     connectionString,
-    max: Number(process.env.PG_POOL_MAX || 5),
+    // Scrapers insert from ~20 sources in parallel; keep headroom for API reads.
+    max: Number(process.env.PG_POOL_MAX || 10),
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
     ssl: useSSL ? { rejectUnauthorized: false } : false,
@@ -147,6 +149,13 @@ export async function initDb() {
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ`);
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS missed_count INTEGER NOT NULL DEFAULT 0`);
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS closed_at TIMESTAMPTZ`);
+    await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS us_ineligible BOOLEAN`);
+    // One-time backfill for rows saved before us_ineligible existed; new rows
+    // get it from isUsEligible() in insertJob.
+    const eligParams = [];
+    const eligSql = usEligibilityCondition(eligParams);
+    await pool.query(`UPDATE jobs SET us_ineligible = NOT (${eligSql}) WHERE us_ineligible IS NULL`, eligParams);
+    await pool.query(`CREATE INDEX IF NOT EXISTS idx_jobs_portal_date ON jobs ((${PORTAL_DATE_SQL}) DESC)`);
     // Data repairs for scraper bugs (idempotent — each matches nothing once fixed):
     //  - Workday links once omitted the career-site segment (https://{host}/job/...),
     //    which 404s. Those URLs can never be refreshed, so retire them.
@@ -215,11 +224,12 @@ export async function insertJob(job) {
 
     if (existingRes.rows.length === 0) {
         const res = await pool.query(
-            `INSERT INTO jobs (id, title, company, location, url, source, category, salary, description, posted_at, status, is_new, last_seen_at, missed_count, closed_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',true, now(), 0, NULL)`,
+            `INSERT INTO jobs (id, title, company, location, url, source, category, salary, description, posted_at, status, is_new, last_seen_at, missed_count, closed_at, us_ineligible)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',true, now(), 0, NULL, $11)`,
             [
                 job.id, job.title, job.company, job.location ?? null, job.url, job.source,
                 job.category, job.salary ?? null, job.description ?? null, job.posted_at ?? null,
+                !isUsEligible(job),
             ]
         );
         return res.rowCount > 0;
@@ -247,6 +257,7 @@ export async function insertJob(job) {
                posted_at = COALESCE($7, posted_at),
                previous_posted_at = COALESCE($8, previous_posted_at),
                is_reposted = true,
+               us_ineligible = $11,
                reposted_at = now(),
                scraped_at = now(),
                is_new = true,
@@ -265,6 +276,7 @@ export async function insertJob(job) {
                 previousPosted,
                 job.url,
                 job.source,
+                !isUsEligible(job),
             ]
         );
         return true;
@@ -280,6 +292,7 @@ export async function insertJob(job) {
            description = COALESCE($6, description),
            posted_at = COALESCE($7, posted_at),
            scraped_at = now(),
+           us_ineligible = $10,
            last_seen_at = CASE WHEN source = $9 THEN now() ELSE last_seen_at END,
            missed_count = CASE WHEN source = $9 THEN 0 ELSE missed_count END,
            closed_at = CASE WHEN source = $9 THEN NULL ELSE closed_at END
@@ -294,6 +307,7 @@ export async function insertJob(job) {
             job.posted_at_estimated ? null : (job.posted_at ?? null),
             job.url,
             job.source,
+            !isUsEligible(job),
         ]
     );
     return false;
@@ -336,10 +350,11 @@ export async function closeStaleJobs(source, polledCompanies, freshUrls, missThr
     return { closed: toClose.length, incremented: toIncrement.length };
 }
 
+// Public feed columns only — no per-user fields (status, notes, applied_at),
+// since the board is shared by everyone who opens it.
 const JOB_COLUMNS = `
-  id, title, company, location, url, source, category, salary, description, notes,
-  posted_at, previous_posted_at, reposted_at, scraped_at, applied_at, status, closed_at,
-  is_new::int AS is_new,
+  id, title, company, location, url, source, category, salary, description,
+  posted_at, previous_posted_at, reposted_at, scraped_at, closed_at,
   is_reposted::int AS is_reposted,
   (CASE WHEN ${PORTAL_DATE_SQL} >= now() - interval '24 hours' THEN 1 ELSE 0 END) AS is_fresh
 `;
@@ -370,44 +385,16 @@ export async function countJobs(filters) {
     return res.rows[0].total;
 }
 
-export async function updateJobStatus(status, id) {
-    const res = await pool.query(
-        `UPDATE jobs
-         SET status = $1,
-             is_new = false,
-             applied_at = CASE
-               WHEN $1 = 'applied' AND applied_at IS NULL THEN now()
-               ELSE applied_at
-             END
-         WHERE id = $2`,
-        [status, id]
-    );
-    return res.rowCount;
-}
-
-export async function updateJobNotes(notes, id) {
-    const res = await pool.query(
-        'UPDATE jobs SET notes = $1 WHERE id = $2',
-        [notes ?? null, id]
-    );
-    return res.rowCount;
-}
-
-export async function markAllSeen() {
-    await pool.query('UPDATE jobs SET is_new = false WHERE is_new = true');
-}
-
+/** Counts for the shared feed: open, US-eligible jobs (what /api/jobs shows by default). */
 export async function getStats() {
     const res = await pool.query(`
       SELECT
         COUNT(*)::int AS total,
-        COALESCE(SUM(CASE WHEN is_new THEN 1 ELSE 0 END), 0)::int AS new_count,
-        COALESCE(SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END), 0)::int AS count_new,
-        COALESCE(SUM(CASE WHEN status = 'applied' THEN 1 ELSE 0 END), 0)::int AS applied,
-        COALESCE(SUM(CASE WHEN status = 'saved' THEN 1 ELSE 0 END), 0)::int AS saved,
-        COALESCE(SUM(CASE WHEN status = 'ignored' THEN 1 ELSE 0 END), 0)::int AS ignored,
-        COALESCE(SUM(CASE WHEN ${PORTAL_DATE_SQL} >= now() - interval '24 hours' THEN 1 ELSE 0 END), 0)::int AS last_24h
+        COALESCE(SUM(CASE WHEN ${PORTAL_DATE_SQL} >= now() - interval '24 hours' THEN 1 ELSE 0 END), 0)::int AS last_24h,
+        COALESCE(SUM(CASE WHEN ${PORTAL_DATE_SQL} >= now() - interval '7 days' THEN 1 ELSE 0 END), 0)::int AS last_7d,
+        COUNT(DISTINCT company)::int AS companies
       FROM jobs
+      WHERE closed_at IS NULL AND us_ineligible IS NOT TRUE
     `);
     return res.rows[0];
 }
@@ -440,8 +427,19 @@ export async function finishScrapeRun(jobsFound, jobsNew, errors, id) {
     );
 }
 
+/**
+ * Latest FINISHED scrape run (an in-progress run has no finish time, which
+ * made the dashboard show "Never"), plus whether one is running right now.
+ * Runs left unfinished by a restart are ignored after 2 hours.
+ */
 export async function getLastScrapeRun() {
-    const res = await pool.query('SELECT * FROM scrape_runs ORDER BY started_at DESC LIMIT 1');
+    const res = await pool.query(`
+      SELECT r.*,
+             EXISTS (SELECT 1 FROM scrape_runs
+                     WHERE finished_at IS NULL AND started_at > now() - interval '2 hours') AS running
+      FROM scrape_runs r
+      WHERE r.finished_at IS NOT NULL
+      ORDER BY r.started_at DESC LIMIT 1`);
     return res.rows[0] || null;
 }
 

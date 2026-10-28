@@ -420,13 +420,16 @@ export function isTechRoleJob(title, description = '') {
     return classifyCategory(title, description) !== null;
 }
 
+/** US-located and not US-citizenship-only. Stored per job (us_ineligible) for fast feed filtering. */
+export function isUsEligible(job) {
+    return isUSCompatible(job?.location || '') && !isUSCitizenshipRequired(job?.title || '', job?.description || '');
+}
+
 /** Gate before persisting — US-located tech role, not US-citizenship-only. */
 export function isEligibleJob(job) {
     if (!job?.category) return false;
     if (!job.url) return false;
-    if (!isUSCompatible(job.location)) return false;
-    if (isUSCitizenshipRequired(job.title, job.description || '')) return false;
-    return true;
+    return isUsEligible(job);
 }
 
 /**

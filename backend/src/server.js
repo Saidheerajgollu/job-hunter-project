@@ -8,7 +8,7 @@ import cors from 'cors';
 import { startScheduler, triggerScrape, triggerFastAtsPoll, triggerWatcher } from './scheduler.js';
 import {
     initDb,
-    getJobs, countJobs, updateJobStatus, updateJobNotes, markAllSeen,
+    getJobs, countJobs,
     getStats, getAllSettings, upsertSetting, getLastScrapeRun,
     getAllJobsForReclassify, updateJobCategory,
     getWatchedCompanies, getWatchedCompany, insertWatchedCompany, deleteWatchedCompany,
@@ -58,11 +58,12 @@ const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
 app.get('/api/jobs', wrap(async (req, res) => {
-    const { status, category, role, source, search, page = 1, limit = 50, fresh_only, has_salary, max_age_days, experience, us_only } = req.query;
-    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const { category, role, source, search, page = 1, limit = 50, fresh_only, has_salary, max_age_days, experience, us_only } = req.query;
+    const pageNum = Math.max(1, parseInt(page) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 50));
+    const offset = (pageNum - 1) * pageSize;
 
     const params = {
-        status: status || null,
         role: role || category || null,
         source: source || null,
         search: search || null,
@@ -71,37 +72,12 @@ app.get('/api/jobs', wrap(async (req, res) => {
         max_age_days: max_age_days ? parseInt(max_age_days) : 0,
         experience: experience || null,
         us_only: us_only !== '0',
-        limit: parseInt(limit),
+        limit: pageSize,
         offset,
     };
 
     const [jobs, total] = await Promise.all([getJobs(params), countJobs(params)]);
-    res.json({ jobs, total, page: parseInt(page), limit: parseInt(limit) });
-}));
-
-app.patch('/api/jobs/:id/status', wrap(async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.body;
-
-    const valid = ['new', 'saved', 'applied', 'ignored'];
-    if (!valid.includes(status)) {
-        return res.status(400).json({ error: `Invalid status. Must be one of: ${valid.join(', ')}` });
-    }
-
-    await updateJobStatus(status, id);
-    res.json({ ok: true });
-}));
-
-app.post('/api/jobs/mark-seen', wrap(async (_req, res) => {
-    await markAllSeen();
-    res.json({ ok: true });
-}));
-
-app.patch('/api/jobs/:id/notes', wrap(async (req, res) => {
-    const { id } = req.params;
-    const { notes } = req.body;
-    await updateJobNotes(notes ?? null, id);
-    res.json({ ok: true });
+    res.json({ jobs, total, page: pageNum, limit: pageSize });
 }));
 
 // Re-classify all existing jobs using the latest classifyCategory logic

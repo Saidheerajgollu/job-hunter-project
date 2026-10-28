@@ -221,10 +221,26 @@ function appendIlikeOr(conditions, params, keywords, fields = ['title', 'descrip
 }
 
 /**
+ * SQL version of isUsEligible — a US location (a US place name overrides a
+ * non-US one) and no citizenship-only wording. Only used to backfill
+ * us_ineligible for rows saved before that column existed.
+ */
+export function usEligibilityCondition(params) {
+    params.push(getNonUsLocationPgRegex());
+    const nonUsIdx = params.length;
+    params.push(getUsLocationPgRegex());
+    const parts = [`(COALESCE(location, '') !~* $${nonUsIdx} OR COALESCE(location, '') ~* $${params.length})`];
+    for (const pattern of CITIZENSHIP_BLOCKED_PATTERNS) {
+        params.push(pattern);
+        parts.push(`title NOT ILIKE $${params.length}`, `COALESCE(description, '') NOT ILIKE $${params.length}`);
+    }
+    return parts.join(' AND ');
+}
+
+/**
  * Build dynamic WHERE clause + params for job listing queries.
  */
 export function buildJobQueryFilters({
-    status,
     role,
     source,
     search,
@@ -240,12 +256,7 @@ export function buildJobQueryFilters({
     // Closed listings drop out of the default feed — a user who already
     // saved or applied keeps seeing their own history, badged as closed
     // by the frontend instead of vanishing.
-    conditions.push(`(closed_at IS NULL OR status IN ('saved', 'applied'))`);
-
-    if (status) {
-        params.push(status);
-        conditions.push(`status = $${params.length}`);
-    }
+    conditions.push('closed_at IS NULL');
 
     if (role && ROLE_TITLE_KEYWORDS[role]) {
         appendIlikeOr(conditions, params, ROLE_TITLE_KEYWORDS[role]);
@@ -280,21 +291,9 @@ export function buildJobQueryFilters({
     }
 
     if (us_only) {
-        // Hide non-US locations — unless the string also names a US place
-        // (multi-office roles like "San Francisco, CA | London" stay visible,
-        // matching isUSCompatible's insert-time check).
-        params.push(getNonUsLocationPgRegex());
-        const nonUsIdx = params.length;
-        params.push(getUsLocationPgRegex());
-        conditions.push(`(COALESCE(location, '') !~* $${nonUsIdx} OR COALESCE(location, '') ~* $${params.length})`);
-        // Exclude US-citizenship-only roles from title + description
-        for (const pattern of CITIZENSHIP_BLOCKED_PATTERNS) {
-            params.push(pattern);
-            const idx = params.length;
-            conditions.push(`title NOT ILIKE $${idx}`);
-            params.push(pattern);
-            conditions.push(`COALESCE(description, '') NOT ILIKE $${params.length}`);
-        }
+        // Computed once per job at insert time (isUsEligible) — re-running the
+        // location regex and citizenship ILIKEs on every row took ~6s per request.
+        conditions.push('us_ineligible IS NOT TRUE');
     }
 
     const where = conditions.length ? conditions.join(' AND ') : 'TRUE';
