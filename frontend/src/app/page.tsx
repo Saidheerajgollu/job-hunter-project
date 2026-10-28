@@ -34,15 +34,6 @@ function formatDate(dateStr: string) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function appliedDaysInfo(appliedAt: string | null): { label: string; cls: string } | null {
-    if (!appliedAt) return null;
-    const days = Math.floor((Date.now() - toUTC(appliedAt).getTime()) / 86400000);
-    if (days === 0) return { label: 'Applied today', cls: 'fresh' };
-    if (days <= 3) return { label: `Applied ${days}d ago`, cls: 'fresh' };
-    if (days <= 7) return { label: `Applied ${days}d ago — follow up?`, cls: 'warning' };
-    return { label: `Applied ${days}d ago — overdue follow-up`, cls: 'overdue' };
-}
-
 function getCompanyInitials(company: string) {
     return company.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
 }
@@ -92,15 +83,16 @@ function useToast() {
 // ── StatsBar ──────────────────────────────────────────────────────────────────
 
 function StatsBar({ stats }: { stats: Stats | null }) {
-    const lastRunTime = stats?.last_run?.finished_at
-        ? timeAgo(stats.last_run.finished_at)
-        : 'Never';
+    const run = stats?.last_run;
+    const lastRunTime = run?.running
+        ? 'Syncing now'
+        : run?.finished_at ? timeAgo(run.finished_at) : '—';
 
     const items = [
-        { label: 'Total', value: stats?.total ?? '—' },
-        { label: 'Unseen', value: stats?.new_count ?? '—' },
-        { label: 'Last 24h', value: stats?.last_24h ?? '—' },
-        { label: 'Applied', value: stats?.applied ?? '—' },
+        { label: 'Open jobs', value: stats?.total?.toLocaleString() ?? '—' },
+        { label: 'Last 24h', value: stats?.last_24h?.toLocaleString() ?? '—' },
+        { label: 'Last 7 days', value: stats?.last_7d?.toLocaleString() ?? '—' },
+        { label: 'Companies', value: stats?.companies?.toLocaleString() ?? '—' },
         { label: 'Last sync', value: lastRunTime, small: true },
     ];
 
@@ -331,39 +323,11 @@ function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
 
 // ── JobCard ───────────────────────────────────────────────────────────────────
 
-function JobCard({
-    job,
-    onStatusChange,
-    onNotesChange,
-}: {
-    job: Job;
-    onStatusChange: (id: string, status: string) => void;
-    onNotesChange: (id: string, notes: string) => void;
-}) {
+function JobCard({ job }: { job: Job }) {
     const initials = getCompanyInitials(job.company);
     const color = getCompanyColor(job.company);
     const [expanded, setExpanded] = useState(false);
     const [descExpanded, setDescExpanded] = useState(false);
-    const [localNotes, setLocalNotes] = useState(job.notes || '');
-    const [notesSaved, setNotesSaved] = useState(false);
-    const [notesSaving, setNotesSaving] = useState(false);
-
-    // Keep local notes in sync if job prop changes (e.g. after re-fetch)
-    useEffect(() => {
-        setLocalNotes(job.notes || '');
-    }, [job.notes]);
-
-    async function saveNotes() {
-        if (localNotes === (job.notes || '')) return;
-        setNotesSaving(true);
-        await onNotesChange(job.id, localNotes);
-        setNotesSaving(false);
-        setNotesSaved(true);
-        setTimeout(() => setNotesSaved(false), 2000);
-    }
-
-    const appliedInfo = appliedDaysInfo(job.applied_at);
-    const hasContent = !!(job.description || true); // always show notes option
 
     const catLabel =
         job.category === 'ai' ? 'AI Eng' :
@@ -376,7 +340,7 @@ function JobCard({
         job.category?.charAt(0).toUpperCase() + job.category?.slice(1);
 
     return (
-        <div className={`job-card-wrap status-${job.status}`}>
+        <div className="job-card-wrap">
             <div className="job-card">
                 <div className="company-logo" style={{ color: `#${color}` }}>
                     <img
@@ -419,76 +383,33 @@ function JobCard({
                         )}
                         <span className="job-meta-item">Synced {timeAgo(job.scraped_at)}</span>
                     </div>
-                    {appliedInfo && (
-                        <span className={`applied-date ${appliedInfo.cls}`}>{appliedInfo.label}</span>
-                    )}
                 </div>
 
                 <div className="job-badges">
                     {job.closed_at && <span className="badge badge-closed">Listing closed</span>}
                     {job.is_fresh === 1 && <span className="badge badge-fresh">Recent</span>}
                     {job.is_reposted === 1 && <span className="badge badge-reposted">Reposted</span>}
-                    {job.is_new === 1 && <span className="badge badge-new">New</span>}
                     {shouldShowSourceBadge(job.source) && (
                         <span className="badge badge-source">{formatSource(job.source)}</span>
                     )}
                     <span className={`badge badge-cat-${job.category}`}>{catLabel}</span>
-                    {job.status === 'applied' && <span className="badge badge-applied">Applied</span>}
-                    {job.status === 'saved' && <span className="badge badge-saved">Saved</span>}
                 </div>
 
                 <div className="job-actions">
-                    {/* External link — does NOT auto-mark applied */}
                     <a
                         href={job.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="btn btn-secondary btn-sm"
+                        className="btn btn-primary btn-sm"
                     >
                         Apply ↗
                     </a>
 
-                    {/* Explicit mark-applied button */}
-                    {job.status !== 'applied' && (
-                        <button
-                            className="btn btn-primary btn-sm"
-                            onClick={() => onStatusChange(job.id, 'applied')}
-                            title="Mark this job as applied"
-                        >
-                            Mark Applied
-                        </button>
-                    )}
-
-                    {/* Save (only for new/ignored) */}
-                    {job.status !== 'saved' && job.status !== 'applied' && (
-                        <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => onStatusChange(job.id, 'saved')}
-                        >
-                            Save
-                        </button>
-                    )}
-
-                    {/* Undo or Hide */}
-                    {job.status === 'applied' ? (
-                        <button className="btn btn-ghost btn-sm" onClick={() => onStatusChange(job.id, 'new')}>
-                            Undo
-                        </button>
-                    ) : (
-                        <button
-                            className="btn btn-ghost btn-sm"
-                            onClick={() => onStatusChange(job.id, 'ignored')}
-                        >
-                            Hide
-                        </button>
-                    )}
-
-                    {/* Expand toggle for description + notes */}
-                    {hasContent && (
+                    {job.description && (
                         <button
                             className="btn btn-ghost btn-sm"
                             onClick={() => setExpanded(e => !e)}
-                            title={expanded ? 'Collapse' : 'Notes / Description'}
+                            title={expanded ? 'Hide description' : 'Show description'}
                             style={{ padding: '5px 7px' }}
                         >
                             {expanded ? '▲' : '▼'}
@@ -497,7 +418,7 @@ function JobCard({
                 </div>
             </div>
 
-            {expanded && (
+            {expanded && job.description && (
                 <div className="job-expand-panel">
                     {job.description && (
                         <div>
@@ -513,60 +434,15 @@ function JobCard({
                         </div>
                     )}
 
-                    <div className="job-notes-section">
-                        <span className="job-notes-label">Notes</span>
-                        <textarea
-                            className="job-notes-textarea"
-                            placeholder="Add notes — resume version, recruiter name, interview stage, follow-up date…"
-                            value={localNotes}
-                            onChange={e => setLocalNotes(e.target.value)}
-                            onBlur={saveNotes}
-                        />
-                        <div className="job-notes-actions">
-                            {notesSaved && <span className="job-notes-saved">Saved</span>}
-                            <button
-                                className="btn btn-ghost btn-sm"
-                                onClick={saveNotes}
-                                disabled={notesSaving || localNotes === (job.notes || '')}
-                            >
-                                {notesSaving ? 'Saving…' : 'Save note'}
-                            </button>
-                        </div>
-                    </div>
                 </div>
             )}
         </div>
     );
 }
 
-// ── Applied Tracker Banner ────────────────────────────────────────────────────
-
-function AppliedBanner({ count }: { count: number }) {
-    if (count === 0) return null;
-    return (
-        <div className="applied-banner">
-            <div>
-                <strong>{count} application{count !== 1 ? 's' : ''} tracked</strong>
-                <span> — click "Mark Applied" on any job to track it here</span>
-            </div>
-        </div>
-    );
-}
-
-// ── Status Tabs ───────────────────────────────────────────────────────────────
-
-const STATUS_TABS = [
-    { value: '', label: 'All', countKey: 'total' as const },
-    { value: 'new', label: 'New', countKey: 'count_new' as const },
-    { value: 'saved', label: 'Saved', countKey: 'saved' as const },
-    { value: 'applied', label: 'Applied', countKey: 'applied' as const },
-    { value: 'ignored', label: 'Hidden', countKey: 'ignored' as const },
-];
-
-// ── Main Page ─────────────────────────────────────────────────────────────────
-
 export default function Home() {
     const [jobs, setJobs] = useState<Job[]>([]);
+    const [loadError, setLoadError] = useState(false);
     const [total, setTotal] = useState(0);
     const [stats, setStats] = useState<Stats | null>(null);
     const [loading, setLoading] = useState(true);
@@ -575,16 +451,19 @@ export default function Home() {
     const [gradLabel, setGradLabel] = useState('2026 new grad');
     const { toasts, show: showToast } = useToast();
 
-    const fetchJobs = useCallback(async (f: JobFilters) => {
-        setLoading(true);
+    const fetchJobs = useCallback(async (f: JobFilters, { quiet = false } = {}) => {
+        if (!quiet) setLoading(true);
         try {
             const res = await api.getJobs(f);
             setJobs(res.jobs);
             setTotal(res.total);
+            setLoadError(false);
         } catch {
-            showToast('Failed to load jobs. Is the backend running?', 'error');
+            // Keep whatever is on screen; only a first load with nothing shows the error state.
+            setLoadError(true);
+            if (!quiet) showToast('Failed to load jobs. Try again in a minute.', 'error');
         } finally {
-            setLoading(false);
+            if (!quiet) setLoading(false);
         }
     }, [showToast]);
 
@@ -602,11 +481,15 @@ export default function Home() {
         }).catch(() => {});
     }, []);
 
+    // Scrapers add jobs all day (ATS boards every 15 min, career sites hourly,
+    // wide sweep every 6h), so refresh in the background: stats every 30s,
+    // the job list every 5 min.
     useEffect(() => {
         fetchJobs(filters);
         fetchStats();
-        const interval = setInterval(fetchStats, 30000);
-        return () => clearInterval(interval);
+        const statsTimer = setInterval(fetchStats, 30000);
+        const jobsTimer = setInterval(() => fetchJobs(filters, { quiet: true }), 5 * 60 * 1000);
+        return () => { clearInterval(statsTimer); clearInterval(jobsTimer); };
     }, [fetchJobs, fetchStats, filters]);
 
     function handleFilterChange(partial: Partial<JobFilters>) {
@@ -623,29 +506,6 @@ export default function Home() {
             showToast('Failed to trigger scrape', 'error');
         } finally {
             setTimeout(() => setScraping(false), 3000);
-        }
-    }
-
-    async function handleStatusChange(id: string, status: string) {
-        try {
-            await api.updateJobStatus(id, status);
-            setJobs(prev => prev.map(j =>
-                j.id === id
-                    ? { ...j, status: status as Job['status'], is_new: 0, applied_at: status === 'applied' && !j.applied_at ? new Date().toISOString() : j.applied_at }
-                    : j
-            ));
-            fetchStats();
-        } catch {
-            showToast('Failed to update status', 'error');
-        }
-    }
-
-    async function handleNotesChange(id: string, notes: string) {
-        try {
-            await api.updateJobNotes(id, notes || null);
-            setJobs(prev => prev.map(j => j.id === id ? { ...j, notes: notes || null } : j));
-        } catch {
-            showToast('Failed to save notes', 'error');
         }
     }
 
@@ -671,7 +531,7 @@ export default function Home() {
             <main className="main-content grid-container">
                 <div className="page-header">
                     <div>
-                        <p className="page-meta">Modular feed · 11 sources</p>
+                        <p className="page-meta">Shared feed · updated automatically</p>
                         <h1 className="page-title">Jobs</h1>
                         <p className="page-subtitle">
                             US-located roles — hides US-citizenship-only jobs (sponsorship not required).
@@ -679,49 +539,17 @@ export default function Home() {
                     </div>
                     <div className="page-actions">
                         <NotificationBell />
-                        {(stats?.new_count ?? 0) > 0 && (
-                            <button
-                                className="btn btn-ghost btn-sm"
-                                onClick={async () => {
-                                    await api.markAllSeen();
-                                    setJobs(prev => prev.map(j => ({ ...j, is_new: 0 })));
-                                    fetchStats();
-                                }}
-                            >
-                                Mark all seen
-                            </button>
-                        )}
                     </div>
                 </div>
 
                 {/* Stats */}
                 <StatsBar stats={stats} />
 
-                {/* Status Tabs */}
                 <div className="toolbar">
-                    <div className="status-tabs">
-                        {STATUS_TABS.map(tab => {
-                            const count = stats ? stats[tab.countKey] : null;
-                            return (
-                                <button
-                                    key={tab.value}
-                                    className={`status-tab ${(filters.status || '') === tab.value ? 'active' : ''}`}
-                                    onClick={() => handleFilterChange({ status: tab.value, page: 1 })}
-                                >
-                                    {tab.label}
-                                    {count != null && count > 0 && (
-                                        <span className="tab-count">{count.toLocaleString()}</span>
-                                    )}
-                                </button>
-                            );
-                        })}
-                    </div>
                     <span className="result-count">
                         {total.toLocaleString()} result{total !== 1 ? 's' : ''}
                     </span>
                 </div>
-
-                {filters.status === 'applied' && <AppliedBanner count={stats?.applied ?? total} />}
 
                 {/* Filters */}
                 <FilterBar
@@ -743,10 +571,10 @@ export default function Home() {
                 ) : jobs.length === 0 ? (
                     <div className="empty-state">
                         <div className="empty-icon">0</div>
-                        <div className="empty-title">No jobs found</div>
+                        <div className="empty-title">{loadError ? 'Jobs failed to load' : 'No jobs found'}</div>
                         <div className="empty-desc">
-                            {filters.status === 'applied'
-                                ? 'No applications tracked yet. Click "Mark Applied" on any job to track it here.'
+                            {loadError
+                                ? 'Could not reach the job server. It may be restarting — try again in a minute.'
                                 : Object.keys(filters).filter(k => filters[k as keyof JobFilters]).length > 2
                                 ? 'Try adjusting your filters or sync to fetch the latest listings.'
                                 : 'Run a sync to pull fresh roles from Greenhouse, Lever, Ashby, and more.'}
@@ -758,12 +586,7 @@ export default function Home() {
                 ) : (
                     <div className="jobs-grid">
                         {jobs.map(job => (
-                            <JobCard
-                                key={job.id}
-                                job={job}
-                                onStatusChange={handleStatusChange}
-                                onNotesChange={handleNotesChange}
-                            />
+                            <JobCard key={job.id} job={job} />
                         ))}
                     </div>
                 )}

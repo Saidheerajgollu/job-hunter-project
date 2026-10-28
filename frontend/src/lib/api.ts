@@ -11,15 +11,11 @@ export interface Job {
     category: 'swe' | 'frontend' | 'backend' | 'fullstack' | 'ai' | 'ml' | 'data-science' | 'data-engineer' | 'data-analyst' | 'devops';
     salary: string | null;
     description: string | null;
-    notes: string | null;
     posted_at: string;
     previous_posted_at: string | null;
     reposted_at: string | null;
     scraped_at: string;
-    applied_at: string | null;
     closed_at: string | null;
-    status: 'new' | 'saved' | 'applied' | 'ignored';
-    is_new: number;
     is_reposted: number;
     is_fresh: number;
 }
@@ -33,12 +29,9 @@ export interface JobsResponse {
 
 export interface Stats {
     total: number;
-    new_count: number;
-    count_new: number;
-    applied: number;
-    saved: number;
-    ignored: number;
     last_24h: number;
+    last_7d: number;
+    companies: number;
     last_run: {
         id: number;
         started_at: string;
@@ -46,11 +39,11 @@ export interface Stats {
         jobs_found: number;
         jobs_new: number;
         errors: string | null;
+        running: boolean;
     } | null;
 }
 
 export interface JobFilters {
-    status?: string;
     category?: string;
     role?: string;
     source?: string;
@@ -117,21 +110,6 @@ export const api = {
         if (!params.has('us_only')) params.set('us_only', '1');
         return apiFetch<JobsResponse>(`/jobs?${params}`);
     },
-
-    updateJobStatus: (id: string, status: string) =>
-        apiFetch<{ ok: boolean }>(`/jobs/${id}/status`, {
-            method: 'PATCH',
-            body: JSON.stringify({ status }),
-        }),
-
-    updateJobNotes: (id: string, notes: string | null) =>
-        apiFetch<{ ok: boolean }>(`/jobs/${id}/notes`, {
-            method: 'PATCH',
-            body: JSON.stringify({ notes }),
-        }),
-
-    markAllSeen: () =>
-        apiFetch<{ ok: boolean }>('/jobs/mark-seen', { method: 'POST' }),
 
     getStats: () => apiFetch<Stats>('/stats'),
 

@@ -1,6 +1,6 @@
 # Job Hunter Pro
 
-A self-hosted job aggregator for US tech roles. The backend collects postings from company job boards, big-company career sites, and public job sites, and stores them in Postgres. The frontend is a dashboard to filter jobs, track applications, and watch specific companies. You still apply on the company's own site.
+A job aggregator for US tech roles. The backend collects postings from company job boards, big-company career sites, and public job sites, and stores them in Postgres. The frontend is a shared, public job board: everyone sees the same feed and applies on the company's own site. There are no accounts and no per-user state.
 
 ## Where jobs come from
 
@@ -23,12 +23,13 @@ Not covered: Meta (its careers site has no public endpoint, so Meta jobs only ar
 1. Each title is classified into a role (SWE, frontend, backend, full stack, AI, ML, data science, data engineer, data analyst, DevOps). Non-tech titles are dropped.
 2. Non-US locations and postings that require US citizenship or a security clearance are dropped.
 3. Jobs are deduplicated by URL. If a known job comes back with a newer posting date, it is flagged as reposted.
-4. For ATS boards that return their full listing, a job missing from two checks in a row is marked closed and leaves the feed. Saved and applied jobs stay visible with a "listing closed" badge.
+4. For ATS boards that return their full listing, a job missing from two checks in a row is marked closed and leaves the feed.
 
 ## Dashboard features
 
 - Filter by role, source, experience level (from the title), posting age (24h / 7 days / 30 days), salary listed, and text search
-- Mark jobs as saved, applied, or hidden, and keep notes per job
+- Stats for open jobs, jobs posted in the last 24 hours and 7 days, companies, and the last sync
+- The page refreshes on its own (stats every 30 seconds, the job list every 5 minutes)
 - Company watchlist: add a company (its ATS is detected automatically) and get browser push alerts when it posts a matching role
 - Watchlist presets for Bay Area, Seattle, and NYC/NJ companies, plus companies found in Web Data Commons' schema.org job data
 - Settings page: hide senior roles (off by default) and set the navbar label
@@ -67,6 +68,7 @@ Backend (`backend/.env`):
 |---|---|---|
 | `DATABASE_URL` | Yes | Postgres connection string |
 | `PGSSL` | No | `false` for a local Postgres without SSL |
+| `PG_POOL_MAX` | No | Max database connections, default 10 |
 | `ALLOWED_ORIGIN` | In production | Frontend URL(s) for CORS, comma-separated |
 | `PORT` | No | API port, default 4000 |
 | `PUSH_CONTACT_EMAIL` | For push alerts | Contact email for Web Push |
@@ -85,10 +87,9 @@ The backend serves JSON under `/api`:
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /jobs` | Job feed. Query: `role`, `source`, `status`, `search`, `experience`, `max_age_days`, `fresh_only`, `has_salary`, `us_only`, `page`, `limit` |
-| `PATCH /jobs/:id/status`, `PATCH /jobs/:id/notes` | Set status (`new`, `saved`, `applied`, `ignored`) or notes |
-| `POST /jobs/mark-seen`, `POST /jobs/reclassify` | Clear "new" flags; re-run role classification |
-| `GET /stats` | Counts and last scrape run |
+| `GET /jobs` | Job feed. Query: `role`, `source`, `search`, `experience`, `max_age_days`, `fresh_only`, `has_salary`, `us_only`, `page`, `limit` (max 100) |
+| `POST /jobs/reclassify` | Re-run role classification on stored jobs |
+| `GET /stats` | Open jobs, last 24h / 7 days, companies, last finished scrape run and whether one is running |
 | `POST /scrape/run` | Start a scrape and an ATS poll now |
 | `GET`/`POST /settings` | Read or update settings |
 | `/companies`, `/companies/presets`, `/companies/bulk`, `/companies/detect`, `/companies/watch/run`, `/companies/repair` | Watchlist |
@@ -97,7 +98,7 @@ The backend serves JSON under `/api`:
 
 ## Deploy
 
-- **Railway (backend):** root directory `backend`. It builds from the `Dockerfile` and uses `/api/health` as the health check. Set `DATABASE_URL`, `ALLOWED_ORIGIN`, and `PUSH_CONTACT_EMAIL`.
+- **Railway (backend):** root directory `/backend`, config file `/backend/railway.json`, watch path `/backend/**`. Without the root directory the build fails, because the repo root has no app in it. Set `DATABASE_URL`, `ALLOWED_ORIGIN`, and `PUSH_CONTACT_EMAIL`.
 - **Vercel (frontend):** root directory `frontend`. Set `NEXT_PUBLIC_API_URL` to the Railway URL plus `/api`.
 - **Supabase:** use the Session pooler connection string on Railway (the direct host is IPv6-only).
 
