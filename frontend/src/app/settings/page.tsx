@@ -140,10 +140,11 @@ export default function SettingsPage() {
                                 <div>
                                     <strong>Sources</strong>
                                     <ul>
-                                        <li>Greenhouse, Lever, Ashby, Workday</li>
-                                        <li>SimplifyJobs community feed</li>
-                                        <li>RemoteOK, Remotive, Himalayas, WWR</li>
-                                        <li>Adzuna & JSearch (optional keys)</li>
+                                        <li>Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee</li>
+                                        <li>Wide sweep of ~28k public ATS boards</li>
+                                        <li>Amazon, Apple, Google, TikTok, ByteDance, Netflix, Microsoft, Oracle sites</li>
+                                        <li>SimplifyJobs, HN Who is hiring, RemoteOK, Remotive, Himalayas, WWR, The Muse, Jobicy</li>
+                                        <li>Adzuna, JSearch, Fantastic.jobs (optional keys)</li>
                                     </ul>
                                 </div>
                                 <div>

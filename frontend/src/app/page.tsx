@@ -62,6 +62,8 @@ function formatSource(source: string) {
         smartrecruiters: 'SmartRecruiters', workable: 'Workable', recruitee: 'Recruitee',
         'schema-org': 'Schema.org',
         hackernews: 'HN Hiring', themuse: 'The Muse', jobicy: 'Jobicy',
+        amazon: 'Amazon', apple: 'Apple', google: 'Google', eightfold: 'Eightfold',
+        bytedance: 'TikTok/ByteDance', oraclecloud: 'Oracle Cloud',
     };
     return labels[source] || source;
 }
@@ -173,6 +175,12 @@ const SOURCES = [
     { value: 'hackernews', label: 'HN Hiring' },
     { value: 'themuse', label: 'The Muse' },
     { value: 'jobicy', label: 'Jobicy' },
+    { value: 'amazon', label: 'Amazon' },
+    { value: 'apple', label: 'Apple' },
+    { value: 'google', label: 'Google' },
+    { value: 'eightfold', label: 'Eightfold (Netflix, Microsoft…)' },
+    { value: 'bytedance', label: 'TikTok/ByteDance' },
+    { value: 'oraclecloud', label: 'Oracle Cloud (JPMorgan…)' },
 ];
 
 function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
