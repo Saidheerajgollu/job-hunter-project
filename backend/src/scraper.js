@@ -22,7 +22,7 @@ import { scrapeEightfold } from './scrapers/eightfold.js';
 import { scrapeByteDance } from './scrapers/bytedance.js';
 import { scrapeOracleCloud } from './scrapers/oraclecloud.js';
 import { discoverATSCompanies, emptyDiscovery } from './utils/discoverCompanies.js';
-import { insertJob, startScrapeRun, finishScrapeRun, getAllSettings, expireUnseenJobs } from './db.js';
+import { insertJob, startScrapeRun, finishScrapeRun, getAllSettings, expireUnseenJobs, closeDuplicateJobs } from './db.js';
 import { isEligibleJob } from './utils/helpers.js';
 
 
@@ -84,9 +84,12 @@ export async function runScraper() {
     // ── Finalize ───────────────────────────────────────────────────────────────
     await finishScrapeRun(totalFound, totalNew, errors.length ? JSON.stringify(errors) : null, runId);
 
-    // Hourly housekeeping: retire listings no source has reported for a week.
+    // Hourly housekeeping: retire listings no source has reported for a week,
+    // and duplicates that slipped in when two sources inserted at once.
     const expired = await expireUnseenJobs(7).catch(() => 0);
     if (expired) console.log(`🧹 Closed ${expired} listing(s) not seen for 7 days`);
+    const dupes = await closeDuplicateJobs().catch(() => 0);
+    if (dupes) console.log(`🧹 Closed ${dupes} duplicate listing(s)`);
 
     console.log(`\n✅ Scrape complete! Found: ${totalFound} | New: ${totalNew} | Errors: ${errors.length}`);
     console.log('─'.repeat(60));
