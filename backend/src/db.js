@@ -157,6 +157,14 @@ export async function initDb() {
     await pool.query(`UPDATE jobs SET us_ineligible = NOT (${eligSql}) WHERE us_ineligible IS NULL`, eligParams);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_jobs_portal_date ON jobs ((${PORTAL_DATE_SQL}) DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_jobs_dedup ON jobs (${DEDUP_KEY_SQL}) WHERE closed_at IS NULL`);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS dead_boards (
+        source TEXT NOT NULL,
+        board TEXT NOT NULL,
+        misses INTEGER NOT NULL DEFAULT 0,
+        last_checked TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (source, board)
+      )`);
     await closeDuplicateJobs();
     // Data repairs for scraper bugs (idempotent — each matches nothing once fixed):
     //  - Workday links once omitted the career-site segment (https://{host}/job/...),
@@ -521,6 +529,44 @@ export async function upsertSetting(key, value) {
 }
 
 // ── Watched Companies ─────────────────────────────────────────────────────────
+
+// ── Dead-board cache (wide sweep) ────────────────────────────────────────────
+// A board that answers "gone" on DEAD_BOARD_MISSES sweeps in a row is skipped
+// until DEAD_BOARD_RECHECK_DAYS have passed, then probed once more.
+export const DEAD_BOARD_MISSES = 3;
+export const DEAD_BOARD_RECHECK_DAYS = 30;
+
+/** Boards to skip this sweep. */
+export async function getDeadBoards(source) {
+    const res = await pool.query(
+        `SELECT board FROM dead_boards
+         WHERE source = $1 AND misses >= $2 AND last_checked > now() - make_interval(days => $3::int)`,
+        [source, DEAD_BOARD_MISSES, DEAD_BOARD_RECHECK_DAYS]
+    );
+    return new Set(res.rows.map(r => r.board));
+}
+
+/**
+ * Record one sweep's outcomes: 'ok' clears a board's misses, 'gone' adds one,
+ * 'unknown' (throttled, timed out, 5xx) changes nothing.
+ */
+export async function recordBoardResults(source, results) {
+    const ok = results.filter(r => r.outcome === 'ok').map(r => r.board);
+    const gone = results.filter(r => r.outcome === 'gone').map(r => r.board);
+    if (ok.length) {
+        await pool.query(`DELETE FROM dead_boards WHERE source = $1 AND board = ANY($2)`, [source, ok]);
+    }
+    if (gone.length) {
+        await pool.query(
+            `INSERT INTO dead_boards (source, board, misses, last_checked)
+             SELECT $1, b, 1, now() FROM unnest($2::text[]) AS b
+             ON CONFLICT (source, board) DO UPDATE
+               SET misses = dead_boards.misses + 1, last_checked = now()`,
+            [source, gone]
+        );
+    }
+    return { cleared: ok.length, missed: gone.length };
+}
 
 /** Distinct company names among open feed jobs (for watchlist name matching). */
 export async function getOpenCompanyNames() {

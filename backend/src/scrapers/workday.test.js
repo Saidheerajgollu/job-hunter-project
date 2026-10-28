@@ -143,4 +143,25 @@ describe('scrapeWorkday', () => {
 
         expect(jobs[0].posted_at_estimated).toBe(true);
     });
+
+    it('reports each tenant as ok, gone (404/410/422) or unknown, for the dead-board cache', async () => {
+        mockFetch(async (url) => {
+            const u = String(url);
+            if (u.includes('alive.wd1')) return { ok: true, status: 200, json: async () => ({ jobPostings: [] }) };
+            if (u.includes('gone.wd1')) return { ok: false, status: 422, json: async () => ({}) };
+            return { ok: false, status: 503, json: async () => ({}) };
+        });
+
+        const { boardResults } = await scrapeWorkday(true, [
+            { company: 'Alive', careerUrl: 'https://alive.wd1.myworkdayjobs.com/Ext' },
+            { company: 'Gone', careerUrl: 'https://gone.wd1.myworkdayjobs.com/Ext' },
+            { company: 'Flaky', careerUrl: 'https://flaky.wd1.myworkdayjobs.com/Ext' },
+        ], { includeSeed: false });
+
+        expect(boardResults).toEqual(expect.arrayContaining([
+            { board: 'alive.wd1.myworkdayjobs.com/ext', outcome: 'ok' },
+            { board: 'gone.wd1.myworkdayjobs.com/ext', outcome: 'gone' },
+            { board: 'flaky.wd1.myworkdayjobs.com/ext', outcome: 'unknown' },
+        ]));
+    });
 });

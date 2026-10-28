@@ -7,7 +7,7 @@ A job aggregator for US tech roles. The backend collects postings from company j
 | What | How often | Notes |
 |---|---|---|
 | Greenhouse, Lever, Ashby, Workday, SmartRecruiters, Workable, Recruitee | every 15 min | Seed company lists plus companies found in SimplifyJobs links |
-| Wide ATS sweep | every 6 h | ~28k more Greenhouse / Lever / Ashby / Workday boards from the public [job-board-aggregator](https://github.com/Feashliaa/job-board-aggregator) list. Keeps jobs posted in the last 30 days |
+| Wide ATS sweep | every 6 h | ~28k more Greenhouse / Lever / Ashby / Workday boards from the public [job-board-aggregator](https://github.com/Feashliaa/job-board-aggregator) list. Keeps jobs posted in the last 30 days. Workday boards that answer "gone" (404/410/422) on 3 sweeps in a row are skipped for 30 days |
 | Amazon, Apple, Google, TikTok, ByteDance | hourly | Each company's own careers site |
 | Eightfold sites (Netflix, Microsoft, Qualcomm, more) | hourly | Extra tenants found in SimplifyJobs links |
 | Oracle Cloud sites (JPMorgan, Honeywell, more) | hourly | Extra tenants found in SimplifyJobs links |

@@ -52,9 +52,16 @@ const DISCOVERED_SEARCH_TERMS = ['software engineer', 'data', 'machine learning'
 const MAX_PAGES_PER_TERM = 3;   // 60 postings per term
 const CONCURRENCY = 10;         // tenants fetched in parallel
 
+// Answers that mean the career site no longer exists: 422 = the tenant is
+// gone, 404/410 = the site name is gone. Anything else (403, 429, 5xx,
+// timeouts) is "unknown" and never counts against a board.
+const GONE_STATUSES = new Set([404, 410, 422]);
+
+/** Postings for one tenant, plus whether the board answered (ok / gone / unknown). */
 async function fetchWorkdayJobs(wd, terms, maxPages = MAX_PAGES_PER_TERM) {
     const allJobs = [];
     let anyOk = false;
+    let firstError = null;
 
     for (const term of terms) {
         try {
@@ -67,21 +74,29 @@ async function fetchWorkdayJobs(wd, terms, maxPages = MAX_PAGES_PER_TERM) {
                 if (batch.length < WORKDAY_PAGE_SIZE) break;
                 await sleep(150);
             }
-        } catch {
+        } catch (err) {
             // The tenant/site itself is broken (renamed, moved) — no point
             // trying the remaining terms.
-            if (!anyOk) break;
+            if (!anyOk) { firstError = err; break; }
         }
         await sleep(150);
     }
 
+    const outcome = anyOk ? 'ok' : GONE_STATUSES.has(firstError?.status) ? 'gone' : 'unknown';
+
     // Deduplicate by externalPath
     const seen = new Set();
-    return allJobs.filter(j => {
+    const postings = allJobs.filter(j => {
         if (seen.has(j.externalPath)) return false;
         seen.add(j.externalPath);
         return true;
     });
+    return { postings, outcome };
+}
+
+/** Stable key for a Workday board, used by the dead-board cache. */
+export function workdayBoardKey(wd) {
+    return `${wd.host}/${wd.site}`.toLowerCase();
 }
 
 function mergeCompanies(seedList, discovered) {
@@ -108,11 +123,13 @@ export async function scrapeWorkday(filterSenior = true, discoveredCompanies = [
     const jobs = [];
     const polledCompanies = [];
     const seenUrls = [];
+    const boardResults = [];
     const companies = mergeCompanies(includeSeed ? WORKDAY_COMPANIES : [], discoveredCompanies);
 
     await mapWithConcurrency(companies, concurrency, async ({ company, wd, seed }) => {
         try {
-            const postings = await fetchWorkdayJobs(wd, seed ? TECH_SEARCH_TERMS : terms, maxPages);
+            const { postings, outcome } = await fetchWorkdayJobs(wd, seed ? TECH_SEARCH_TERMS : terms, maxPages);
+            boardResults.push({ board: workdayBoardKey(wd), outcome });
             // fetchWorkdayJobs returns [] for both "endpoint down" and "zero
             // matching jobs" — indistinguishable. To avoid false negatives
             // (closing valid listings on a transient outage), only count this
@@ -157,5 +174,5 @@ export async function scrapeWorkday(filterSenior = true, discoveredCompanies = [
         }
     });
 
-    return { jobs, polledCompanies, seenUrls };
+    return { jobs, polledCompanies, seenUrls, boardResults };
 }

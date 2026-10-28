@@ -254,7 +254,11 @@ export async function fetchWorkdayPage(wd, { searchText = '', offset = 0, timeou
         body: JSON.stringify({ appliedFacets: {}, limit: WORKDAY_PAGE_SIZE, offset, searchText }),
         signal: AbortSignal.timeout(timeoutMs),
     });
-    if (!resp.ok) throw new Error(`Workday HTTP ${resp.status}`);
+    if (!resp.ok) {
+        const err = new Error(`Workday HTTP ${resp.status}`);
+        err.status = resp.status;
+        throw err;
+    }
     const data = await resp.json();
     return data.jobPostings || [];
 }

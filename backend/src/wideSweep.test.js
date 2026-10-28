@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 
-vi.mock('./db.js', () => ({ getAllSettings: vi.fn(), insertJob: vi.fn(), closeStaleJobs: vi.fn() }));
+vi.mock('./db.js', () => ({ getAllSettings: vi.fn(), insertJob: vi.fn(), closeStaleJobs: vi.fn(), getDeadBoards: vi.fn(), recordBoardResults: vi.fn() }));
 
-const { selectWideCompanies, prepareWideResult } = await import('./wideSweep.js');
+const { selectWideCompanies, prepareWideResult, skipDeadBoards } = await import('./wideSweep.js');
 const { emptyDiscovery } = await import('./utils/discoverCompanies.js');
 
 describe('selectWideCompanies', () => {
@@ -58,5 +58,16 @@ describe('prepareWideResult', () => {
         expect(out.jobs.map(j => j.url)).toEqual(['new']);
         // Every posting still counts as seen, so old-but-open jobs are never closed.
         expect(out.seenUrls).toEqual(['new', 'old']);
+    });
+});
+
+describe('skipDeadBoards', () => {
+    it('drops Workday tenants the dead-board cache has retired, matching case-insensitively', () => {
+        const companies = [
+            { company: 'Gone', careerUrl: 'https://gone.wd1.myworkdayjobs.com/Ext' },
+            { company: 'Alive', careerUrl: 'https://alive.wd1.myworkdayjobs.com/Ext' },
+        ];
+        const out = skipDeadBoards(companies, new Set(['gone.wd1.myworkdayjobs.com/ext']));
+        expect(out.map(c => c.company)).toEqual(['Alive']);
     });
 });

@@ -16,12 +16,12 @@
 import { scrapeGreenhouse, GREENHOUSE_COMPANIES } from './scrapers/greenhouse.js';
 import { scrapeLever, LEVER_COMPANIES } from './scrapers/lever.js';
 import { scrapeAshby, ASHBY_COMPANIES } from './scrapers/ashby.js';
-import { scrapeWorkday, WORKDAY_COMPANIES } from './scrapers/workday.js';
+import { scrapeWorkday, WORKDAY_COMPANIES, workdayBoardKey } from './scrapers/workday.js';
 import { fetchAtsDirectory, isFreshJob } from './utils/atsDirectory.js';
 import { discoverATSCompanies, emptyDiscovery } from './utils/discoverCompanies.js';
 import { parseWorkdayUrl } from './watchers/atsFetchers.js';
 import { saveAndClose, getCorePolledCompanies } from './fastPoll.js';
-import { getAllSettings } from './db.js';
+import { getAllSettings, getDeadBoards, recordBoardResults } from './db.js';
 
 export function wideSweepEnabled() {
     return process.env.WIDE_SWEEP !== 'false';
@@ -44,6 +44,14 @@ export function prepareWideResult(result, coreNames, ageDays, now = Date.now()) 
         polledCompanies: result.polledCompanies.filter(n => !collides(n)),
         seenUrls: result.seenUrls,
     };
+}
+
+/** Drop Workday tenants the dead-board cache has retired. */
+export function skipDeadBoards(companies, deadBoards) {
+    return companies.filter(c => {
+        const wd = parseWorkdayUrl(c.careerUrl);
+        return !wd || !deadBoards.has(workdayBoardKey(wd));
+    });
 }
 
 /** Directory entries the fast poll doesn't already cover. */
@@ -77,6 +85,12 @@ export async function runWideSweep() {
         discoverATSCompanies().catch(() => emptyDiscovery()),
     ]);
     const wide = selectWideCompanies(directory, discovered);
+    const deadWorkday = await getDeadBoards('workday').catch(() => new Set());
+    const workdayBefore = wide.workday.length;
+    wide.workday = skipDeadBoards(wide.workday, deadWorkday);
+    if (workdayBefore !== wide.workday.length) {
+        console.log(`🪦 Skipping ${workdayBefore - wide.workday.length} Workday boards that keep answering "gone"`);
+    }
     console.log(`\n🌐 Wide sweep: ${wide.greenhouse.length} Greenhouse | ${wide.lever.length} Lever | ` +
         `${wide.ashby.length} Ashby | ${wide.workday.length} Workday boards, keeping jobs ≤ ${ageDays} days old`);
 
@@ -101,6 +115,10 @@ export async function runWideSweep() {
     await Promise.allSettled(sources.map(async ({ name, source, closerEnabled, fn }) => {
         try {
             const result = await fn();
+            if (result.boardResults) {
+                const { cleared, missed } = await recordBoardResults(source, result.boardResults);
+                console.log(`🪦 ${name}: ${missed} board(s) answered "gone", ${cleared} answered normally`);
+            }
             const fresh = prepareWideResult(result, getCorePolledCompanies(source), ageDays);
             const { found, newCount } = await saveAndClose(name, source, fresh, closerEnabled);
             totalFound += found;
