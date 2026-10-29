@@ -39,13 +39,14 @@ Two filters go with it: **Hide no-sponsorship** and **H-1B sponsors only**. Only
 The Labor Department site blocks automated downloads, so this is a manual step.
 
 1. Open https://www.dol.gov/agencies/eta/foreign-labor/performance and download the LCA disclosure files in a browser into `data/lca/` (git-ignored). FY2025's files each cover one quarter, so get all four (`LCA_Disclosure_Data_FY2025_Q1.xlsx` … `_Q4.xlsx`). FY2026's files are cumulative, so get only the newest one (e.g. `LCA_Disclosure_Data_FY2026_Q3.xlsx`). The import logs each file's row count, so check the date range if a file looks short.
-2. From `backend/`, with `DATABASE_URL` pointing at the database (about 2 minutes, ~500 MB of memory):
+2. From `backend/`, build the snapshot (about 2 minutes, ~500 MB of memory). No database or password is needed:
    ```bash
-   node scripts/import-h1b-lca.js ../data/lca/LCA_Disclosure_Data_FY2025_Q*.xlsx ../data/lca/LCA_Disclosure_Data_FY2026_Q3.xlsx
+   node scripts/import-h1b-lca.js ../data/lca/LCA_Disclosure_Data_FY2025_Q*.xlsx ../data/lca/LCA_Disclosure_Data_FY2026_Q3.xlsx --snapshot
    ```
-   The table is replaced in one step, so a failed import keeps the old numbers. An import that finds no employers, or less than half of what's stored now, is refused (add `--force` if a smaller result is expected). Only per-company counts are stored, never contact or attorney details.
-3. When a new FY2026 file comes out, rerun with it in place of the older FY2026 file. When FY2027 files start, drop the FY2025 files.
-4. If a big company shows `no data available`, add its government entity names to `backend/src/presets/h1bAliases.js`.
+   This writes `backend/src/data/h1b-employers.json.gz` (about 2 MB, per-company counts only, never contact or attorney details).
+3. Commit and push that file. When the backend restarts on Railway, it loads the new snapshot into the database in one step, and the old numbers stay if anything fails. An import that finds no employers, or less than half of what's stored now, is refused. (To write straight to a database instead, drop `--snapshot` and set `DATABASE_URL`; add `--force` if a smaller result is expected.)
+4. When a new FY2026 file comes out, rerun with it in place of the older FY2026 file. When FY2027 files start, drop the FY2025 files.
+5. If a big company shows `no data available`, add its legal names from the LCA files to `backend/src/presets/h1bAliases.js`.
 
 ## Dashboard features
 

@@ -44,4 +44,4 @@ Thumbs.db
 *.tsbuildinfo
 
 # Downloaded LCA (H-1B) source files — large, re-downloadable
-data/
+/data/

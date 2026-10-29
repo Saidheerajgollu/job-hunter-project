@@ -16,6 +16,7 @@ import {
 } from './db.js';
 import { classifyCategory, makeJobId } from './utils/helpers.js';
 import { getH1bIndex, attachH1b, h1bCompanyNames } from './h1bLookup.js';
+import { syncH1bSnapshot } from './h1bSnapshot.js';
 import { detectATS } from './utils/atsDetector.js';
 import { DEFAULT_WATCH_ROLES_JSON } from './utils/roleFilters.js';
 import { initPush, getVapidPublicKey, sendPushToAll } from './utils/pushNotifications.js';
@@ -296,6 +297,14 @@ async function main() {
     });
 
     await initDb();
+    // Load the bundled H-1B snapshot if it's newer than what's in the database.
+    // A failure here only means H-1B numbers stay as they were.
+    try {
+        const h1b = await syncH1bSnapshot();
+        if (h1b.loaded) console.log(`🛂 Loaded H-1B snapshot ${h1b.version}: ${h1b.rows} employers`);
+    } catch (err) {
+        console.error(`❌ H-1B snapshot not loaded, previous data kept: ${err.message}`);
+    }
     await initPush();
     startScheduler();
 }
