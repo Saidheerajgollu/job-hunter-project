@@ -25,9 +25,31 @@ Not covered: Meta (its careers site has no public endpoint, so Meta jobs only ar
 3. Jobs are deduplicated by URL, and by company + title + location across sources (the company's own ATS copy is kept over an aggregator's). If a known job comes back with a newer posting date, it is flagged as reposted.
 4. For ATS boards that return their full listing, a job missing from two checks in a row is marked closed and leaves the feed. Any job that no source has reported for 7 days is closed too.
 
+## Visa signals (for OPT / STEM OPT)
+
+Every job card shows two things before you click Apply:
+
+- **What the posting says:** a `No sponsorship` or `Sponsors visas` badge when the description says so. Nothing is shown when the posting doesn't say, or the source gives no description. (Citizen-only and clearance jobs are hidden from the feed.)
+- **The company's H-1B record:** for example `H-1B: 1,240 filings FY25–26 · last filed Jun 2026`, from US Department of Labor filings (certified H-1B LCAs). `H-1B: no data available` means the company's name matched nothing, or matched several unrelated employers. It doesn't mean the company never sponsors.
+
+Two filters go with it: **Hide no-sponsorship** and **H-1B sponsors only**. Only FY2025 and newer data is used.
+
+### Updating H-1B data (once a quarter)
+
+The Labor Department site blocks automated downloads, so this is a manual step.
+
+1. Open https://www.dol.gov/agencies/eta/foreign-labor/performance and download the LCA disclosure files in a browser: `LCA_Disclosure_Data_FY2025_Q4.xlsx` and the newest FY2026 file (e.g. `LCA_Disclosure_Data_FY2026_Q3.xlsx`).
+2. From `backend/`, with `DATABASE_URL` pointing at the database:
+   ```bash
+   node scripts/import-h1b-lca.js ~/Downloads/LCA_Disclosure_Data_FY2025_Q4.xlsx ~/Downloads/LCA_Disclosure_Data_FY2026_Q3.xlsx
+   ```
+   The table is replaced in one step, so a failed import keeps the old numbers. Only per-company counts are stored, never contact or attorney details.
+3. When a new FY2026 quarter comes out, rerun with that file instead. When FY2027 files start, drop FY2025.
+4. If a big company shows `no data available`, add its government entity names to `backend/src/presets/h1bAliases.js`.
+
 ## Dashboard features
 
-- Filter by role, source, experience level (from the title), posting age (24h / 7 days / 30 days), salary listed, and text search
+- Filter by role, source, experience level (from the title), posting age (24h / 7 days / 30 days), salary listed, visa wording, H-1B sponsors, and text search
 - Stats for open jobs, jobs posted in the last 24 hours and 7 days, companies, and the last sync
 - The page refreshes on its own (stats every 30 seconds, the job list every 5 minutes)
 - Company watchlist: add a company and get browser push alerts when it posts a matching role. If its ATS is found, the board is checked directly every 30 minutes; otherwise the company is matched by name against the jobs all the scrapers collect
@@ -87,7 +109,8 @@ The backend serves JSON under `/api`:
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /jobs` | Job feed. Query: `role`, `source`, `search`, `experience`, `max_age_days`, `fresh_only`, `has_salary`, `us_only`, `page`, `limit` (max 100) |
+| `GET /jobs` | Job feed. Query: `role`, `source`, `search`, `experience`, `max_age_days`, `fresh_only`, `has_salary`, `hide_no_sponsorship`, `h1b_only`, `us_only`, `page`, `limit` (max 100). Each job includes `visa_wording` and `h1b` |
+| `GET /h1b/meta` | When the H-1B data was imported and which fiscal years it covers |
 | `POST /jobs/reclassify` | Re-run role classification on stored jobs |
 | `GET /stats` | Open jobs, last 24h / 7 days, companies, last finished scrape run and whether one is running |
 | `POST /scrape/run` | Start a scrape and an ATS poll now |
@@ -116,6 +139,7 @@ Run from `backend/`:
 | `node scripts/validate-ats-slugs.js [--fix-career]` | Check the preset companies' ATS slugs |
 | `node scripts/sync-preset-overrides.js` | Write `presets/atsOverrides.js` fixes back into the preset files |
 | `node scripts/discover-companies-from-wdc.js` | Build the Web Data Commons preset list |
+| `node scripts/import-h1b-lca.js <files.xlsx>` | Load Labor Department H-1B filing files (see "Updating H-1B data") |
 
 ## Project layout
 
