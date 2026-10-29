@@ -36,3 +36,13 @@ export function isRelistRepost({ closed_at, scraped_at }, now = Date.now()) {
     const last = Date.parse(scraped_at || '');
     return !Number.isNaN(last) && now - last >= RELIST_GAP_MS;
 }
+
+// Relative dates ("Posted Today" / "Posted Yesterday", Workday and others)
+// shift by a day depending on when we poll, so a repost needs a bigger jump.
+export const REPOST_DATE_GAP_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** The portal's posting date moved forward by 3+ days: the role was reposted on the same URL. */
+export function isPortalDateRepost(oldPosted, newPosted) {
+    if (!oldPosted || !newPosted) return false;
+    return newPosted.getTime() - oldPosted.getTime() >= REPOST_DATE_GAP_MS;
+}

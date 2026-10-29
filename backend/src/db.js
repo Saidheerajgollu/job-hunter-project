@@ -14,7 +14,7 @@ import pg from 'pg';
 import { buildJobQueryFilters, usEligibilityCondition, PORTAL_DATE_SQL } from './utils/roleFilters.js';
 import { isUsEligible } from './utils/helpers.js';
 import { detectVisaWording } from './utils/visaWording.js';
-import { computeStaleUpdates, isRelistRepost } from './utils/staleness.js';
+import { computeStaleUpdates, isRelistRepost, isPortalDateRepost } from './utils/staleness.js';
 
 const { Pool } = pg;
 
@@ -227,6 +227,20 @@ export async function initDb() {
                AND (posted_at IS NOT DISTINCT FROM previous_posted_at OR posted_at < previous_posted_at)`
         );
     }
+    //  - Reposts used to need only a 1-day date move, so "Posted Today" vs
+    //    "Posted Yesterday" drift flagged jobs as reposted. Clear flags whose
+    //    date moved forward less than the new 3-day threshold.
+    const repostFix3 = await pool.query(
+        `INSERT INTO settings (key, value) VALUES ('migration_small_shift_reposts_2026_10', 'done')
+         ON CONFLICT (key) DO NOTHING`
+    );
+    if (repostFix3.rowCount > 0) {
+        await pool.query(
+            `UPDATE jobs SET is_reposted = false, reposted_at = NULL
+             WHERE is_reposted AND posted_at > previous_posted_at
+               AND posted_at - previous_posted_at < interval '3 days'`
+        );
+    }
     //  - visa_wording (what a posting says about sponsorship) for rows saved
     //    before the column existed. New rows get it in insertJob.
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS visa_wording TEXT`);
@@ -247,7 +261,6 @@ export async function initDb() {
 
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
-const REPOST_DATE_GAP_MS = 24 * 60 * 60 * 1000;      // portal date moved by 1+ day
 
 function parseTs(value) {
     if (!value) return null;
@@ -317,13 +330,6 @@ async function backfillVisaWording() {
         }
         lastId = rows[rows.length - 1].id;
     }
-}
-
-/** Portal posted date moved forward — likely a repost on the same URL. */
-function isPortalDateRepost(oldPosted, newPosted) {
-    if (!newPosted) return false;
-    if (!oldPosted) return false;
-    return newPosted.getTime() - oldPosted.getTime() >= REPOST_DATE_GAP_MS;
 }
 
 /**

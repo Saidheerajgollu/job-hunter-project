@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeStaleUpdates, isRelistRepost } from './staleness.js';
+import { computeStaleUpdates, isRelistRepost, isPortalDateRepost } from './staleness.js';
 
 describe('computeStaleUpdates', () => {
     it('leaves a job alone when its URL is in freshUrls', () => {
@@ -77,5 +77,25 @@ describe('isRelistRepost', () => {
 
     it('does not flag a listing closed only briefly (back within 7 days)', () => {
         expect(isRelistRepost({ closed_at: daysAgo(1), scraped_at: daysAgo(2) }, now)).toBe(false);
+    });
+});
+
+
+describe('isPortalDateRepost', () => {
+    const d = iso => new Date(iso);
+
+    it('flags a posting date that jumped forward by days', () => {
+        expect(isPortalDateRepost(d('2026-10-01T00:00:00Z'), d('2026-10-20T00:00:00Z'))).toBe(true);
+    });
+
+    it('ignores a one-day shift from relative dates like "Posted Today" vs "Posted Yesterday"', () => {
+        expect(isPortalDateRepost(d('2026-10-27T18:00:00Z'), d('2026-10-28T23:30:00Z'))).toBe(false);
+        expect(isPortalDateRepost(d('2026-10-26T00:00:00Z'), d('2026-10-28T12:00:00Z'))).toBe(false);
+    });
+
+    it('ignores dates moving backward or missing', () => {
+        expect(isPortalDateRepost(d('2026-10-20T00:00:00Z'), d('2026-03-01T00:00:00Z'))).toBe(false);
+        expect(isPortalDateRepost(null, d('2026-10-20T00:00:00Z'))).toBe(false);
+        expect(isPortalDateRepost(d('2026-10-20T00:00:00Z'), null)).toBe(false);
     });
 });
