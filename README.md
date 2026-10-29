@@ -38,13 +38,13 @@ Two filters go with it: **Hide no-sponsorship** and **H-1B sponsors only**. Only
 
 The Labor Department site blocks automated downloads, so this is a manual step.
 
-1. Open https://www.dol.gov/agencies/eta/foreign-labor/performance and download the LCA disclosure files in a browser: `LCA_Disclosure_Data_FY2025_Q4.xlsx` and the newest FY2026 file (e.g. `LCA_Disclosure_Data_FY2026_Q3.xlsx`).
-2. From `backend/`, with `DATABASE_URL` pointing at the database:
+1. Open https://www.dol.gov/agencies/eta/foreign-labor/performance and download the LCA disclosure files in a browser into `data/lca/` (git-ignored). FY2025's files each cover one quarter, so get all four (`LCA_Disclosure_Data_FY2025_Q1.xlsx` … `_Q4.xlsx`). FY2026's files are cumulative, so get only the newest one (e.g. `LCA_Disclosure_Data_FY2026_Q3.xlsx`). The import logs each file's row count, so check the date range if a file looks short.
+2. From `backend/`, with `DATABASE_URL` pointing at the database (about 2 minutes, ~500 MB of memory):
    ```bash
-   node scripts/import-h1b-lca.js ~/Downloads/LCA_Disclosure_Data_FY2025_Q4.xlsx ~/Downloads/LCA_Disclosure_Data_FY2026_Q3.xlsx
+   node scripts/import-h1b-lca.js ../data/lca/LCA_Disclosure_Data_FY2025_Q*.xlsx ../data/lca/LCA_Disclosure_Data_FY2026_Q3.xlsx
    ```
    The table is replaced in one step, so a failed import keeps the old numbers. An import that finds no employers, or less than half of what's stored now, is refused (add `--force` if a smaller result is expected). Only per-company counts are stored, never contact or attorney details.
-3. When a new FY2026 quarter comes out, rerun with that file instead. When FY2027 files start, drop FY2025.
+3. When a new FY2026 file comes out, rerun with it in place of the older FY2026 file. When FY2027 files start, drop the FY2025 files.
 4. If a big company shows `no data available`, add its government entity names to `backend/src/presets/h1bAliases.js`.
 
 ## Dashboard features
