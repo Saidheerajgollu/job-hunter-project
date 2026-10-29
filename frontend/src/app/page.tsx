@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { api, Job, Stats, JobFilters } from '@/lib/api';
+import { api, Job, Stats, JobFilters, H1bMeta } from '@/lib/api';
 import { WatchlistPanel, NotificationBell } from '@/components/WatchlistPanel';
 import { ReachOutFooter } from '@/components/ReachOutFooter';
 
@@ -32,6 +32,29 @@ function formatDate(dateStr: string) {
     const d = toUTC(dateStr);
     if (isNaN(d.getTime())) return 'Date unknown';
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** A calendar date ("2026-04-01") shown as-is — no time-zone shift to the day before. */
+function formatDay(ymd: string) {
+    const d = new Date(`${ymd}T00:00:00Z`);
+    if (isNaN(d.getTime())) return 'Date unknown';
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "H-1B: 1,240 filings FY25–26 · last filed Jun 2026", "H-1B: no data available", or null (no data imported). */
+function formatH1b(h1b: Job['h1b']): string | null {
+    if (h1b === null || h1b === undefined) return null;
+    if (h1b === 'none') return 'H-1B: no data available';
+    const n = h1b.filings.toLocaleString();
+    const word = h1b.filings === 1 ? 'filing' : 'filings';
+    let last = '';
+    if (h1b.last_filed) {
+        const [y, m] = h1b.last_filed.split('-');
+        last = ` · last filed ${MONTHS[Number(m) - 1]} ${y}`;
+    }
+    return `H-1B: ${n} ${word} ${h1b.fiscal_years}${last}`;
 }
 
 function getCompanyInitials(company: string) {
@@ -117,6 +140,8 @@ interface FilterBarProps {
     onChange: (f: Partial<JobFilters>) => void;
     onScrape: () => void;
     scraping: boolean;
+    /** True once H-1B data has been imported; hides the "H-1B sponsors only" chip until then. */
+    h1bAvailable: boolean;
 }
 
 const CATEGORIES = [
@@ -175,7 +200,7 @@ const SOURCES = [
     { value: 'oraclecloud', label: 'Oracle Cloud (JPMorgan…)' },
 ];
 
-function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
+function FilterBar({ filters, onChange, onScrape, scraping, h1bAvailable }: FilterBarProps) {
     const [search, setSearch] = useState(filters.search || '');
     const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -315,6 +340,22 @@ function FilterBar({ filters, onChange, onScrape, scraping }: FilterBarProps) {
                     >
                         Has salary
                     </button>
+                    <button
+                        className={`chip chip-visa ${filters.hide_no_sponsorship === '1' ? 'active' : ''}`}
+                        onClick={() => onChange({ hide_no_sponsorship: filters.hide_no_sponsorship === '1' ? '' : '1', page: 1 })}
+                        title="Hide jobs whose posting says no visa sponsorship"
+                    >
+                        Hide no-sponsorship
+                    </button>
+                    {h1bAvailable && (
+                        <button
+                            className={`chip chip-visa ${filters.h1b_only === '1' ? 'active' : ''}`}
+                            onClick={() => onChange({ h1b_only: filters.h1b_only === '1' ? '' : '1', page: 1 })}
+                            title="Only companies with certified H-1B filings in FY25–26"
+                        >
+                            H-1B sponsors only
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
@@ -382,6 +423,18 @@ function JobCard({ job }: { job: Job }) {
                             </span>
                         )}
                         <span className="job-meta-item">Synced {timeAgo(job.scraped_at)}</span>
+                        {job.visa_wording === 'no_sponsorship' && (
+                            <span className="badge badge-no-sponsor" title="The posting says the company won't sponsor a visa">No sponsorship</span>
+                        )}
+                        {job.visa_wording === 'sponsors' && (
+                            <span className="badge badge-sponsors" title="The posting says visa sponsorship is available">Sponsors visas</span>
+                        )}
+                        {formatH1b(job.h1b) && (
+                            <span className={`job-meta-item job-h1b${job.h1b === 'none' ? ' job-h1b-none' : ''}`}
+                                title="Certified H-1B applications (LCAs) filed by this company, from US Dept. of Labor data">
+                                {formatH1b(job.h1b)}
+                            </span>
+                        )}
                     </div>
                 </div>
 
@@ -445,6 +498,7 @@ export default function Home() {
     const [loadError, setLoadError] = useState(false);
     const [total, setTotal] = useState(0);
     const [stats, setStats] = useState<Stats | null>(null);
+    const [h1bMeta, setH1bMeta] = useState<H1bMeta | null>(null);
     const [loading, setLoading] = useState(true);
     const [scraping, setScraping] = useState(false);
     const [filters, setFilters] = useState<JobFilters>({ page: 1, limit: 30, us_only: '1', max_age_days: '30' });
@@ -472,6 +526,11 @@ export default function Home() {
             const s = await api.getStats();
             setStats(s);
         } catch { /* ignore */ }
+    }, []);
+
+    // H-1B data source info (changes only on a quarterly import).
+    useEffect(() => {
+        api.getH1bMeta().then(setH1bMeta).catch(() => {});
     }, []);
 
     // Fetch grad label from settings (cheap, one-time)
@@ -544,6 +603,14 @@ export default function Home() {
 
                 {/* Stats */}
                 <StatsBar stats={stats} />
+                {h1bMeta?.imported_at && (
+                    <p className="data-footnote">
+                        H-1B data: US Dept. of Labor LCA filings,{' '}
+                        {h1bMeta.min_fy === h1bMeta.max_fy ? `FY${h1bMeta.max_fy}` : `FY${h1bMeta.min_fy}–FY${h1bMeta.max_fy}`}
+                        {h1bMeta.latest_decision ? ` (through ${formatDay(h1bMeta.latest_decision)})` : ''},
+                        updated {formatDate(h1bMeta.imported_at)}. Counts certified H-1B applications only.
+                    </p>
+                )}
 
                 <div className="toolbar">
                     <span className="result-count">
@@ -557,6 +624,7 @@ export default function Home() {
                     onChange={handleFilterChange}
                     onScrape={handleScrape}
                     scraping={scraping}
+                    h1bAvailable={!!h1bMeta?.imported_at}
                 />
 
                 {/* Watchlist */}
