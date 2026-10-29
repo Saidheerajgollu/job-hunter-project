@@ -159,6 +159,16 @@ export async function initDb() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_jobs_portal_date ON jobs ((${PORTAL_DATE_SQL}) DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_jobs_dedup ON jobs (${DEDUP_KEY_SQL}) WHERE closed_at IS NULL`);
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS h1b_employers (
+        key TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        filings INTEGER NOT NULL,
+        last_decision_date DATE,
+        fein_count INTEGER NOT NULL,
+        min_fy INTEGER NOT NULL,
+        max_fy INTEGER NOT NULL
+      )`);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS dead_boards (
         source TEXT NOT NULL,
         board TEXT NOT NULL,
@@ -568,6 +578,62 @@ export async function upsertSetting(key, value) {
 }
 
 // ── Watched Companies ─────────────────────────────────────────────────────────
+
+// ── H-1B employer filings (DOL LCA data, imported by scripts/import-h1b-lca.js) ──
+
+/**
+ * Replace the whole h1b_employers table in one transaction, so the site keeps
+ * the previous data if an import fails halfway.
+ */
+export async function replaceH1bEmployers(rows) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('DELETE FROM h1b_employers');
+        for (let i = 0; i < rows.length; i += 5000) {
+            const batch = rows.slice(i, i + 5000);
+            await client.query(
+                `INSERT INTO h1b_employers (key, display_name, filings, last_decision_date, fein_count, min_fy, max_fy)
+                 SELECT * FROM unnest($1::text[], $2::text[], $3::int[], $4::date[], $5::int[], $6::int[], $7::int[])`,
+                [
+                    batch.map(r => r.key), batch.map(r => r.display_name), batch.map(r => r.filings),
+                    batch.map(r => r.last_decision_date), batch.map(r => r.fein_count),
+                    batch.map(r => r.min_fy), batch.map(r => r.max_fy),
+                ]
+            );
+        }
+        await client.query(
+            `INSERT INTO settings (key, value) VALUES ('h1b_imported_at', $1)
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+            [new Date().toISOString()]
+        );
+        await client.query('COMMIT');
+        return rows.length;
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+export async function getH1bEmployers() {
+    const res = await pool.query(
+        `SELECT key, display_name, filings, to_char(last_decision_date, 'YYYY-MM-DD') AS last_decision_date,
+                fein_count, min_fy, max_fy FROM h1b_employers`
+    );
+    return res.rows;
+}
+
+export async function getH1bMeta() {
+    const res = await pool.query(`
+      SELECT (SELECT value FROM settings WHERE key = 'h1b_imported_at') AS imported_at,
+             MIN(min_fy) AS min_fy, MAX(max_fy) AS max_fy,
+             to_char(MAX(last_decision_date), 'YYYY-MM-DD') AS latest_decision
+      FROM h1b_employers`);
+    const r = res.rows[0];
+    return { imported_at: r.imported_at ?? null, min_fy: r.min_fy ?? null, max_fy: r.max_fy ?? null, latest_decision: r.latest_decision ?? null };
+}
 
 // ── Dead-board cache (wide sweep) ────────────────────────────────────────────
 // A board that answers "gone" on DEAD_BOARD_MISSES sweeps in a row is skipped
