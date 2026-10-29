@@ -213,6 +213,20 @@ export async function initDb() {
                AND posted_at IS NOT DISTINCT FROM previous_posted_at`
         );
     }
+    //    Second pass: flags whose posting date moved BACKWARD (Greenhouse now
+    //    reports first_published instead of updated_at). A real repost needs
+    //    the date to move forward, so these could only come from the outage.
+    const repostFix2 = await pool.query(
+        `INSERT INTO settings (key, value) VALUES ('migration_outage_reposts_2026_10b', 'done')
+         ON CONFLICT (key) DO NOTHING`
+    );
+    if (repostFix2.rowCount > 0) {
+        await pool.query(
+            `UPDATE jobs SET is_reposted = false, reposted_at = NULL
+             WHERE is_reposted AND reposted_at >= '2026-10-28 19:00:00+00'
+               AND (posted_at IS NOT DISTINCT FROM previous_posted_at OR posted_at < previous_posted_at)`
+        );
+    }
     //  - visa_wording (what a posting says about sponsorship) for rows saved
     //    before the column existed. New rows get it in insertJob.
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS visa_wording TEXT`);
