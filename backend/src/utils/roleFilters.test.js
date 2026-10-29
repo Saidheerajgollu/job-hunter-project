@@ -36,3 +36,25 @@ describe('US-only filter', () => {
         expect(sql).toContain('NOT ILIKE');
     });
 });
+
+describe('hide_no_sponsorship filter', () => {
+    it('excludes jobs whose posting says no sponsorship (keeps unknown ones)', () => {
+        expect(buildJobQueryFilters({ hide_no_sponsorship: true }).where).toContain("visa_wording IS DISTINCT FROM 'no_sponsorship'");
+    });
+
+    it('adds nothing when the flag is off', () => {
+        expect(buildJobQueryFilters({}).where).not.toContain('visa_wording');
+    });
+});
+
+describe('h1b_companies filter', () => {
+    it('limits the feed to the given company names', () => {
+        const { where, params } = buildJobQueryFilters({ h1b_companies: ['Stripe'] });
+        expect(where).toMatch(/company = ANY\(\$\d+\)/);
+        expect(params).toContainEqual(['Stripe']);
+    });
+
+    it('adds nothing when no list is given', () => {
+        expect(buildJobQueryFilters({ h1b_companies: null }).where).not.toContain('ANY');
+    });
+});

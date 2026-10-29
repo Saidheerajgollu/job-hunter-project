@@ -16,8 +16,24 @@ export interface Job {
     reposted_at: string | null;
     scraped_at: string;
     closed_at: string | null;
+    visa_wording: 'no_sponsorship' | 'sponsors' | null;
+    /** Company's FY25–26 H-1B record: summary, 'none' (no usable match), or null (no data imported). */
+    h1b: H1bSummary | 'none' | null;
     is_reposted: number;
     is_fresh: number;
+}
+
+export interface H1bSummary {
+    filings: number;
+    last_filed: string | null;
+    fiscal_years: string;
+}
+
+export interface H1bMeta {
+    imported_at: string | null;
+    min_fy: number | null;
+    max_fy: number | null;
+    latest_decision: string | null;
 }
 
 export interface JobsResponse {
@@ -50,6 +66,8 @@ export interface JobFilters {
     search?: string;
     fresh_only?: string;
     has_salary?: string;
+    hide_no_sponsorship?: string;
+    h1b_only?: string;
     max_age_days?: string;
     experience?: string;
     us_only?: string;
@@ -112,6 +130,8 @@ export const api = {
     },
 
     getStats: () => apiFetch<Stats>('/stats'),
+
+    getH1bMeta: () => apiFetch<H1bMeta>('/h1b/meta'),
 
     triggerScrape: () =>
         apiFetch<{ ok: boolean; message: string }>('/scrape/run', { method: 'POST' }),

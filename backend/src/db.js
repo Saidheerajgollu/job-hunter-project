@@ -13,6 +13,7 @@ import 'dotenv/config';
 import pg from 'pg';
 import { buildJobQueryFilters, usEligibilityCondition, PORTAL_DATE_SQL } from './utils/roleFilters.js';
 import { isUsEligible } from './utils/helpers.js';
+import { detectVisaWording } from './utils/visaWording.js';
 import { computeStaleUpdates } from './utils/staleness.js';
 
 const { Pool } = pg;
@@ -158,6 +159,16 @@ export async function initDb() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_jobs_portal_date ON jobs ((${PORTAL_DATE_SQL}) DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_jobs_dedup ON jobs (${DEDUP_KEY_SQL}) WHERE closed_at IS NULL`);
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS h1b_employers (
+        key TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        filings INTEGER NOT NULL,
+        last_decision_date DATE,
+        fein_count INTEGER NOT NULL,
+        min_fy INTEGER NOT NULL,
+        max_fy INTEGER NOT NULL
+      )`);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS dead_boards (
         source TEXT NOT NULL,
         board TEXT NOT NULL,
@@ -187,6 +198,15 @@ export async function initDb() {
     );
     if (leverFix.rowCount > 0) {
         await pool.query(`UPDATE jobs SET closed_at = NULL, missed_count = 0 WHERE source = 'lever' AND closed_at IS NOT NULL`);
+    }
+    //  - visa_wording (what a posting says about sponsorship) for rows saved
+    //    before the column existed. New rows get it in insertJob.
+    await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS visa_wording TEXT`);
+    // Marked done only after the backfill finishes, so a crash halfway retries.
+    const visaDone = await pool.query(`SELECT 1 FROM settings WHERE key = 'migration_visa_wording_2026_10'`);
+    if (!visaDone.rows.length) {
+        await backfillVisaWording();
+        await pool.query(`INSERT INTO settings (key, value) VALUES ('migration_visa_wording_2026_10', 'done') ON CONFLICT (key) DO NOTHING`);
     }
     for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
         await pool.query(
@@ -248,6 +268,30 @@ export async function expireUnseenJobs(days = 7) {
     return res.rowCount;
 }
 
+/** Compute visa_wording for every stored job with a description, 1,000 at a time. */
+async function backfillVisaWording() {
+    let lastId = '';
+    for (;;) {
+        const { rows } = await pool.query(
+            `SELECT id, title, description FROM jobs WHERE description IS NOT NULL AND id > $1 ORDER BY id LIMIT 1000`,
+            [lastId]
+        );
+        if (!rows.length) return;
+        const ids = [], values = [];
+        for (const r of rows) {
+            const wording = detectVisaWording(r.title, r.description);
+            if (wording) { ids.push(r.id); values.push(wording); }
+        }
+        if (ids.length) {
+            await pool.query(
+                `UPDATE jobs SET visa_wording = v.w FROM unnest($1::text[], $2::text[]) AS v(id, w) WHERE jobs.id = v.id`,
+                [ids, values]
+            );
+        }
+        lastId = rows[rows.length - 1].id;
+    }
+}
+
 /** Portal posted date moved forward — likely a repost on the same URL. */
 function isPortalDateRepost(oldPosted, newPosted) {
     if (!newPosted) return false;
@@ -281,12 +325,12 @@ export async function insertJob(job) {
         if (dup.rows.length) return false;
 
         const res = await pool.query(
-            `INSERT INTO jobs (id, title, company, location, url, source, category, salary, description, posted_at, status, is_new, last_seen_at, missed_count, closed_at, us_ineligible)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',true, now(), 0, NULL, $11)`,
+            `INSERT INTO jobs (id, title, company, location, url, source, category, salary, description, posted_at, status, is_new, last_seen_at, missed_count, closed_at, us_ineligible, visa_wording)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',true, now(), 0, NULL, $11, $12)`,
             [
                 job.id, job.title, job.company, job.location ?? null, job.url, job.source,
                 job.category, job.salary ?? null, job.description ?? null, job.posted_at ?? null,
-                !isUsEligible(job),
+                !isUsEligible(job), detectVisaWording(job.title, job.description),
             ]
         );
         return res.rowCount > 0;
@@ -315,6 +359,7 @@ export async function insertJob(job) {
                previous_posted_at = COALESCE($8, previous_posted_at),
                is_reposted = true,
                us_ineligible = $11,
+               visa_wording = $12,
                reposted_at = now(),
                scraped_at = now(),
                is_new = true,
@@ -338,6 +383,7 @@ export async function insertJob(job) {
                 job.url,
                 job.source,
                 !isUsEligible(job),
+                detectVisaWording(job.title, job.description),
             ]
         );
         return true;
@@ -354,6 +400,7 @@ export async function insertJob(job) {
            posted_at = COALESCE($7, posted_at),
            scraped_at = now(),
            us_ineligible = $10,
+           visa_wording = CASE WHEN $6::text IS NULL THEN visa_wording ELSE $11 END,
            last_seen_at = CASE WHEN source = $9 THEN now() ELSE last_seen_at END,
            missed_count = CASE WHEN source = $9 THEN 0 ELSE missed_count END,
            closed_at = CASE WHEN source = $9 AND NOT EXISTS (
@@ -373,6 +420,7 @@ export async function insertJob(job) {
             job.url,
             job.source,
             !isUsEligible(job),
+            detectVisaWording(job.title, job.description),
         ]
     );
     return false;
@@ -420,6 +468,7 @@ export async function closeStaleJobs(source, polledCompanies, freshUrls, missThr
 const JOB_COLUMNS = `
   id, title, company, location, url, source, category, salary, description,
   posted_at, previous_posted_at, reposted_at, scraped_at, closed_at,
+  visa_wording,
   is_reposted::int AS is_reposted,
   (CASE WHEN ${PORTAL_DATE_SQL} >= now() - interval '24 hours' THEN 1 ELSE 0 END) AS is_fresh
 `;
@@ -529,6 +578,67 @@ export async function upsertSetting(key, value) {
 }
 
 // ── Watched Companies ─────────────────────────────────────────────────────────
+
+// ── H-1B employer filings (DOL LCA data, imported by scripts/import-h1b-lca.js) ──
+
+/**
+ * Replace the whole h1b_employers table in one transaction, so the site keeps
+ * the previous data if an import fails halfway.
+ */
+export async function replaceH1bEmployers(rows) {
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        await client.query('DELETE FROM h1b_employers');
+        for (let i = 0; i < rows.length; i += 5000) {
+            const batch = rows.slice(i, i + 5000);
+            await client.query(
+                `INSERT INTO h1b_employers (key, display_name, filings, last_decision_date, fein_count, min_fy, max_fy)
+                 SELECT * FROM unnest($1::text[], $2::text[], $3::int[], $4::date[], $5::int[], $6::int[], $7::int[])`,
+                [
+                    batch.map(r => r.key), batch.map(r => r.display_name), batch.map(r => r.filings),
+                    batch.map(r => r.last_decision_date), batch.map(r => r.fein_count),
+                    batch.map(r => r.min_fy), batch.map(r => r.max_fy),
+                ]
+            );
+        }
+        await client.query(
+            `INSERT INTO settings (key, value) VALUES ('h1b_imported_at', $1)
+             ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
+            [new Date().toISOString()]
+        );
+        await client.query('COMMIT');
+        return rows.length;
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+}
+
+export async function countH1bEmployers() {
+    const res = await pool.query('SELECT COUNT(*)::int AS n FROM h1b_employers');
+    return res.rows[0].n;
+}
+
+export async function getH1bEmployers() {
+    const res = await pool.query(
+        `SELECT key, display_name, filings, to_char(last_decision_date, 'YYYY-MM-DD') AS last_decision_date,
+                fein_count, min_fy, max_fy FROM h1b_employers`
+    );
+    return res.rows;
+}
+
+export async function getH1bMeta() {
+    const res = await pool.query(`
+      SELECT (SELECT value FROM settings WHERE key = 'h1b_imported_at') AS imported_at,
+             MIN(min_fy) AS min_fy, MAX(max_fy) AS max_fy,
+             to_char(MAX(last_decision_date), 'YYYY-MM-DD') AS latest_decision
+      FROM h1b_employers`);
+    const r = res.rows[0];
+    return { imported_at: r.imported_at ?? null, min_fy: r.min_fy ?? null, max_fy: r.max_fy ?? null, latest_decision: r.latest_decision ?? null };
+}
 
 // ── Dead-board cache (wide sweep) ────────────────────────────────────────────
 // A board that answers "gone" on DEAD_BOARD_MISSES sweeps in a row is skipped

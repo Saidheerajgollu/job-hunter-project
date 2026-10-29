@@ -246,6 +246,8 @@ export function buildJobQueryFilters({
     search,
     fresh_only,
     has_salary,
+    hide_no_sponsorship,
+    h1b_companies = null,
     max_age_days,
     experience,
     us_only = true,
@@ -275,6 +277,15 @@ export function buildJobQueryFilters({
 
     if (fresh_only) {
         conditions.push(`${PORTAL_DATE_SQL} >= now() - interval '24 hours'`);
+    }
+
+    if (Array.isArray(h1b_companies)) {
+        params.push(h1b_companies);
+        conditions.push(`company = ANY($${params.length})`);
+    }
+
+    if (hide_no_sponsorship) {
+        conditions.push(`visa_wording IS DISTINCT FROM 'no_sponsorship'`);
     }
 
     if (has_salary) {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeCompanyName, buildCompanyIndex, companyNameKeys } from './companyNames.js';
+import { normalizeCompanyName, buildCompanyIndex, companyNameKeys, normalizeLegalName, legalNameKeys } from './companyNames.js';
 
 describe('normalizeCompanyName', () => {
     it('ignores case, punctuation and common corporate suffixes', () => {
@@ -29,5 +29,24 @@ describe('companyNameKeys', () => {
         expect(companyNameKeys('Google / Alphabet')).toEqual(['googlealphabet', 'google', 'alphabet']);
         expect(companyNameKeys('Auth0 (Okta)')).toEqual(['auth0', 'okta']);
         expect(companyNameKeys('Stripe')).toEqual(['stripe']);
+    });
+});
+
+
+describe('normalizeLegalName (strict, for H-1B matching)', () => {
+    it('strips only legal-form suffixes, so different companies stay different', () => {
+        expect(normalizeLegalName('Figure AI')).not.toBe(normalizeLegalName('Figure Technologies Inc'));
+        expect(normalizeLegalName('Ramp')).not.toBe(normalizeLegalName('The Ramp Group'));
+    });
+
+    it('still matches the same company across spellings of its legal form', () => {
+        expect(normalizeLegalName('STRIPE INC')).toBe(normalizeLegalName('Stripe'));
+        expect(normalizeLegalName('Stripe, Inc.')).toBe('stripe');
+        expect(normalizeLegalName('PERPLEXITY AI INC')).toBe(normalizeLegalName('Perplexity AI'));
+        expect(normalizeLegalName('JPMorgan Chase & Co.')).toBe('jpmorganchaseand');
+    });
+
+    it('legalNameKeys tries "A / B" parts and a parenthetical alias', () => {
+        expect(legalNameKeys('Google / Alphabet')).toEqual(['googlealphabet', 'google', 'alphabet']);
     });
 });

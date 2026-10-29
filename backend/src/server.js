@@ -8,13 +8,14 @@ import cors from 'cors';
 import { startScheduler, triggerScrape, triggerFastAtsPoll, triggerWatcher } from './scheduler.js';
 import {
     initDb,
-    getJobs, countJobs,
+    getJobs, countJobs, getH1bMeta, getOpenCompanyNames,
     getStats, getAllSettings, upsertSetting, getLastScrapeRun,
     getAllJobsForReclassify, updateJobCategory,
     getWatchedCompanies, getWatchedCompany, insertWatchedCompany, deleteWatchedCompany,
     insertPushSubscription, deletePushSubscription, getRecentWatchNotifications,
 } from './db.js';
 import { classifyCategory, makeJobId } from './utils/helpers.js';
+import { getH1bIndex, attachH1b, h1bCompanyNames } from './h1bLookup.js';
 import { detectATS } from './utils/atsDetector.js';
 import { DEFAULT_WATCH_ROLES_JSON } from './utils/roleFilters.js';
 import { initPush, getVapidPublicKey, sendPushToAll } from './utils/pushNotifications.js';
@@ -58,7 +59,7 @@ const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
 app.get('/api/jobs', wrap(async (req, res) => {
-    const { category, role, source, search, page = 1, limit = 50, fresh_only, has_salary, max_age_days, experience, us_only } = req.query;
+    const { category, role, source, search, page = 1, limit = 50, fresh_only, has_salary, max_age_days, experience, us_only, hide_no_sponsorship, h1b_only } = req.query;
     const pageNum = Math.max(1, parseInt(page) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 50));
     const offset = (pageNum - 1) * pageSize;
@@ -69,6 +70,7 @@ app.get('/api/jobs', wrap(async (req, res) => {
         search: search || null,
         fresh_only: fresh_only === '1',
         has_salary: has_salary === '1',
+        hide_no_sponsorship: hide_no_sponsorship === '1',
         max_age_days: max_age_days ? parseInt(max_age_days) : 0,
         experience: experience || null,
         us_only: us_only !== '0',
@@ -76,8 +78,12 @@ app.get('/api/jobs', wrap(async (req, res) => {
         offset,
     };
 
+    const h1bIndex = await getH1bIndex();
+    // "H-1B sponsors only" is ignored until H-1B data has been imported.
+    if (h1b_only === '1' && !h1bIndex.isEmpty()) params.h1b_companies = await sponsorCompanyNames(h1bIndex);
+
     const [jobs, total] = await Promise.all([getJobs(params), countJobs(params)]);
-    res.json({ jobs, total, page: pageNum, limit: pageSize });
+    res.json({ jobs: attachH1b(jobs, h1bIndex), total, page: pageNum, limit: pageSize });
 }));
 
 // Re-classify all existing jobs using the latest classifyCategory logic
@@ -91,6 +97,20 @@ app.post('/api/jobs/reclassify', wrap(async (_req, res) => {
         if (changes > 0) updated++;
     }
     res.json({ ok: true, total: jobs.length, updated });
+}));
+
+// Feed companies with a matched H-1B record, recomputed when the index reloads
+// or after 10 minutes (new companies arrive from the scrapers all day).
+let sponsorNamesCache = { index: null, at: 0, names: [] };
+async function sponsorCompanyNames(index) {
+    if (sponsorNamesCache.index !== index || Date.now() - sponsorNamesCache.at > 10 * 60 * 1000) {
+        sponsorNamesCache = { index, at: Date.now(), names: h1bCompanyNames(index, await getOpenCompanyNames()) };
+    }
+    return sponsorNamesCache.names;
+}
+
+app.get('/api/h1b/meta', wrap(async (_req, res) => {
+    res.json(await getH1bMeta());
 }));
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
