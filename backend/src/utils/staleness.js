@@ -28,13 +28,18 @@ const RELIST_GAP_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * A listing counts as "relisted" only when it had actually been closed (taken
- * down) and comes back after 7+ days unseen. Just not being checked for a
+ * down) for 2+ days and comes back after 7+ days unseen. Just not being checked for a
  * while — e.g. while the scraper was down — is not a relist.
  */
+const MIN_CLOSED_MS = 2 * 24 * 60 * 60 * 1000;
+
 export function isRelistRepost({ closed_at, scraped_at }, now = Date.now()) {
-    if (!closed_at) return false;
+    const closed = Date.parse(closed_at || '');
     const last = Date.parse(scraped_at || '');
-    return !Number.isNaN(last) && now - last >= RELIST_GAP_MS;
+    if (Number.isNaN(closed) || Number.isNaN(last)) return false;
+    // It must also have stayed closed for 2+ days: a job expired just after a
+    // scraper outage and seen again hours later was never really taken down.
+    return now - closed >= MIN_CLOSED_MS && now - last >= RELIST_GAP_MS;
 }
 
 // Relative dates ("Posted Today" / "Posted Yesterday", Workday and others)

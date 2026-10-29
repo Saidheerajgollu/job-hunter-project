@@ -75,6 +75,10 @@ describe('isRelistRepost', () => {
         expect(isRelistRepost({ closed_at: null, scraped_at: daysAgo(56) }, now)).toBe(false);
     });
 
+    it('does not flag a listing that was closed only hours ago (expired after an outage, then seen again)', () => {
+        expect(isRelistRepost({ closed_at: new Date(now - 3600000).toISOString(), scraped_at: daysAgo(56) }, now)).toBe(false);
+    });
+
     it('does not flag a listing closed only briefly (back within 7 days)', () => {
         expect(isRelistRepost({ closed_at: daysAgo(1), scraped_at: daysAgo(2) }, now)).toBe(false);
     });

@@ -227,6 +227,21 @@ export async function initDb() {
                AND (posted_at IS NOT DISTINCT FROM previous_posted_at OR posted_at < previous_posted_at)`
         );
     }
+    //  - Jobs expired right after the outage restart and seen again hours
+    //    later were flagged as relisted. Clear relist flags (date unchanged or
+    //    moved back) set since the restart; the relist rule now also needs the
+    //    job to have stayed closed for 2+ days.
+    const repostFix4 = await pool.query(
+        `INSERT INTO settings (key, value) VALUES ('migration_outage_relists_2026_10c', 'done')
+         ON CONFLICT (key) DO NOTHING`
+    );
+    if (repostFix4.rowCount > 0) {
+        await pool.query(
+            `UPDATE jobs SET is_reposted = false, reposted_at = NULL
+             WHERE is_reposted AND reposted_at >= '2026-10-28 19:00:00+00'
+               AND (posted_at IS NULL OR previous_posted_at IS NULL OR posted_at <= previous_posted_at)`
+        );
+    }
     //  - Reposts used to need only a 1-day date move, so "Posted Today" vs
     //    "Posted Yesterday" drift flagged jobs as reposted. Clear flags whose
     //    date moved forward less than the new 3-day threshold.
