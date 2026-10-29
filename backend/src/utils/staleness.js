@@ -23,3 +23,16 @@ export function computeStaleUpdates(existingOpenJobs, freshUrls, missThreshold =
 
     return { toIncrement, toClose };
 }
+
+const RELIST_GAP_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * A listing counts as "relisted" only when it had actually been closed (taken
+ * down) and comes back after 7+ days unseen. Just not being checked for a
+ * while — e.g. while the scraper was down — is not a relist.
+ */
+export function isRelistRepost({ closed_at, scraped_at }, now = Date.now()) {
+    if (!closed_at) return false;
+    const last = Date.parse(scraped_at || '');
+    return !Number.isNaN(last) && now - last >= RELIST_GAP_MS;
+}

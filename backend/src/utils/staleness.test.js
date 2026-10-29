@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeStaleUpdates } from './staleness.js';
+import { computeStaleUpdates, isRelistRepost } from './staleness.js';
 
 describe('computeStaleUpdates', () => {
     it('leaves a job alone when its URL is in freshUrls', () => {
@@ -59,5 +59,23 @@ describe('computeStaleUpdates', () => {
         const { toIncrement, toClose } = computeStaleUpdates([], new Set(['https://x/a']));
         expect(toIncrement).toEqual([]);
         expect(toClose).toEqual([]);
+    });
+});
+
+
+describe('isRelistRepost', () => {
+    const now = new Date('2026-10-28T20:00:00Z').getTime();
+    const daysAgo = d => new Date(now - d * 86400000).toISOString();
+
+    it('flags a listing that was closed and comes back after 7+ days', () => {
+        expect(isRelistRepost({ closed_at: daysAgo(3), scraped_at: daysAgo(10) }, now)).toBe(true);
+    });
+
+    it('does not flag an open listing that simply was not checked for a while (e.g. a scraper outage)', () => {
+        expect(isRelistRepost({ closed_at: null, scraped_at: daysAgo(56) }, now)).toBe(false);
+    });
+
+    it('does not flag a listing closed only briefly (back within 7 days)', () => {
+        expect(isRelistRepost({ closed_at: daysAgo(1), scraped_at: daysAgo(2) }, now)).toBe(false);
     });
 });

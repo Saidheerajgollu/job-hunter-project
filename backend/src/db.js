@@ -14,7 +14,7 @@ import pg from 'pg';
 import { buildJobQueryFilters, usEligibilityCondition, PORTAL_DATE_SQL } from './utils/roleFilters.js';
 import { isUsEligible } from './utils/helpers.js';
 import { detectVisaWording } from './utils/visaWording.js';
-import { computeStaleUpdates } from './utils/staleness.js';
+import { computeStaleUpdates, isRelistRepost } from './utils/staleness.js';
 
 const { Pool } = pg;
 
@@ -199,6 +199,20 @@ export async function initDb() {
     if (leverFix.rowCount > 0) {
         await pool.query(`UPDATE jobs SET closed_at = NULL, missed_count = 0 WHERE source = 'lever' AND closed_at IS NOT NULL`);
     }
+    //  - Production didn't scrape from 2026-09-02 until it restarted on
+    //    2026-10-28 ~19:00 UTC, and the old relist rule flagged every returning
+    //    job as "Reposted". Clear those flags where the posting date didn't move.
+    const repostFix = await pool.query(
+        `INSERT INTO settings (key, value) VALUES ('migration_outage_reposts_2026_10', 'done')
+         ON CONFLICT (key) DO NOTHING`
+    );
+    if (repostFix.rowCount > 0) {
+        await pool.query(
+            `UPDATE jobs SET is_reposted = false, reposted_at = NULL
+             WHERE is_reposted AND reposted_at >= '2026-10-28 19:00:00+00'
+               AND posted_at IS NOT DISTINCT FROM previous_posted_at`
+        );
+    }
     //  - visa_wording (what a posting says about sponsorship) for rows saved
     //    before the column existed. New rows get it in insertJob.
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS visa_wording TEXT`);
@@ -219,7 +233,6 @@ export async function initDb() {
 
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
-const RELIST_GAP_MS = 7 * 24 * 60 * 60 * 1000;       // reappeared after 7+ days unseen
 const REPOST_DATE_GAP_MS = 24 * 60 * 60 * 1000;      // portal date moved by 1+ day
 
 function parseTs(value) {
@@ -299,20 +312,13 @@ function isPortalDateRepost(oldPosted, newPosted) {
     return newPosted.getTime() - oldPosted.getTime() >= REPOST_DATE_GAP_MS;
 }
 
-/** Job URL seen again after a long gap — listing was removed and put back up. */
-function isRelistRepost(lastScrapedAt) {
-    const last = parseTs(lastScrapedAt);
-    if (!last) return false;
-    return Date.now() - last.getTime() >= RELIST_GAP_MS;
-}
-
 /**
  * Insert or update a job by URL.
  * Returns true when a new row is created OR a repost is detected (resurfaced to user).
  */
 export async function insertJob(job) {
     const existingRes = await pool.query(
-        `SELECT posted_at, previous_posted_at, scraped_at FROM jobs WHERE url = $1 LIMIT 1`,
+        `SELECT posted_at, previous_posted_at, scraped_at, closed_at FROM jobs WHERE url = $1 LIMIT 1`,
         [job.url]
     );
 
@@ -342,7 +348,10 @@ export async function insertJob(job) {
     // never compare it for reposts or let it overwrite the stored date.
     const newPosted = job.posted_at_estimated ? null : parseTs(job.posted_at);
     const portalRepost = isPortalDateRepost(oldPosted, newPosted);
-    const relistRepost = isRelistRepost(existing.scraped_at);
+    const relistRepost = isRelistRepost({
+        closed_at: existing.closed_at && new Date(existing.closed_at).toISOString(),
+        scraped_at: existing.scraped_at && new Date(existing.scraped_at).toISOString(),
+    });
     const isRepost = portalRepost || relistRepost;
 
     if (isRepost) {
