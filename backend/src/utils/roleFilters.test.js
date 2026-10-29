@@ -46,3 +46,15 @@ describe('hide_no_sponsorship filter', () => {
         expect(buildJobQueryFilters({}).where).not.toContain('visa_wording');
     });
 });
+
+describe('h1b_companies filter', () => {
+    it('limits the feed to the given company names', () => {
+        const { where, params } = buildJobQueryFilters({ h1b_companies: ['Stripe'] });
+        expect(where).toMatch(/company = ANY\(\$\d+\)/);
+        expect(params).toContainEqual(['Stripe']);
+    });
+
+    it('adds nothing when no list is given', () => {
+        expect(buildJobQueryFilters({ h1b_companies: null }).where).not.toContain('ANY');
+    });
+});
