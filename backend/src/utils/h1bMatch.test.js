@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildH1bIndex } from './h1bMatch.js';
+import { createAggregator } from './h1bAggregate.js';
 
 const row = (o) => ({ display_name: o.key.toUpperCase(), filings: 1, last_decision_date: '2026-03-01', fein_count: 1, min_fy: 2026, max_fy: 2026, ...o });
 
@@ -34,7 +35,40 @@ describe('buildH1bIndex', () => {
     });
 
     it('uses the built-in alias list by default', () => {
-        const index = buildH1bIndex([row({ key: 'amazoncomservices', filings: 7, fein_count: 4 })]);
+        // "Amazon.com Services LLC" (real DOL spelling) → key "amazonservices"
+        const index = buildH1bIndex([row({ key: 'amazonservices', filings: 7, fein_count: 4 })]);
         expect(index.lookup('Amazon').filings).toBe(7);
+    });
+});
+
+
+describe('buildH1bIndex — review fixes', () => {
+    const lca = (o) => ({ CASE_STATUS: 'Certified', VISA_CLASS: 'H-1B', DECISION_DATE: '2026-03-15', ...o });
+
+    it('resolves aliases written as real DOL spellings (Amazon.com Services LLC)', () => {
+        const agg = createAggregator();
+        agg.add(lca({ CASE_NUMBER: '1', EMPLOYER_NAME: 'Amazon.com Services LLC', EMPLOYER_FEIN: '10' }));
+        agg.add(lca({ CASE_NUMBER: '2', EMPLOYER_NAME: 'Amazon.com Services LLC', EMPLOYER_FEIN: '11' }));
+        agg.add(lca({ CASE_NUMBER: '3', EMPLOYER_NAME: 'Amazon Web Services, Inc.', EMPLOYER_FEIN: '12' }));
+        const index = buildH1bIndex(agg.result(), { Amazon: ['Amazon.com Services LLC', 'Amazon Web Services, Inc.'] });
+        expect(index.lookup('Amazon').filings).toBe(3);
+    });
+
+    it('uses only alias targets when a company has aliases (no unrelated same-name filer)', () => {
+        const index = buildH1bIndex([
+            row({ key: 'metaplatforms', filings: 500 }),
+            row({ key: 'meta', filings: 3 }),
+        ], { Meta: ['Meta Platforms, Inc.'] });
+        expect(index.lookup('Meta').filings).toBe(500);
+    });
+
+    it('does not match a different company that only shares the first word', () => {
+        const agg = createAggregator();
+        agg.add(lca({ CASE_NUMBER: '1', EMPLOYER_NAME: 'FIGURE TECHNOLOGIES INC', EMPLOYER_FEIN: '20' }));
+        expect(buildH1bIndex(agg.result(), {}).lookup('Figure AI')).toBe('none');
+    });
+
+    it('treats a key with no recorded FEIN as unverified', () => {
+        expect(buildH1bIndex([row({ key: 'acme', fein_count: 0 })], {}).lookup('Acme')).toBe('none');
     });
 });

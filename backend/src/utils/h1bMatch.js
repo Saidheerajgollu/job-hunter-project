@@ -1,32 +1,48 @@
 /**
- * Read-time matching of feed companies to aggregated H-1B employers.
- * A direct name hit is only trusted when it comes from one employer (one
- * FEIN); several unrelated employers sharing a name show "no data" rather
- * than someone else's numbers. Hits through the alias list are trusted.
+ * Read-time matching of feed companies to aggregated H-1B employers, using
+ * strict legal-name keys. A company listed in the alias file is matched to
+ * exactly its listed entities. Otherwise a direct name hit is trusted only
+ * when it comes from exactly one employer (one FEIN): several employers
+ * sharing a name, or a name with no FEIN on record, show "no data" rather
+ * than possibly someone else's numbers.
  */
 
-import { companyNameKeys } from './companyNames.js';
+import { legalNameKeys, normalizeLegalName } from './companyNames.js';
 import { H1B_ALIASES } from '../presets/h1bAliases.js';
 
 const fy2 = y => String(y % 100).padStart(2, '0');
 
+/** { feed key → Set of employer keys } from { 'Feed Name': ['DOL spelling', ...] }. */
+function compileAliases(aliases) {
+    const map = new Map();
+    for (const [feedName, spellings] of Object.entries(aliases)) {
+        const key = normalizeLegalName(feedName);
+        const targets = map.get(key) || new Set();
+        for (const s of spellings) targets.add(normalizeLegalName(s));
+        map.set(key, targets);
+    }
+    return map;
+}
+
 export function buildH1bIndex(rows, aliases = H1B_ALIASES) {
     const byKey = new Map(rows.map(r => [r.key, r]));
+    const aliasMap = compileAliases(aliases);
 
     return {
         isEmpty: () => byKey.size === 0,
 
         /** H1bSummary | 'none' */
         lookup(companyName) {
-            const keys = companyNameKeys(companyName);
+            const keys = legalNameKeys(companyName);
             const hits = new Set();
-            for (const key of keys) {
-                for (const target of aliases[key] || []) if (byKey.has(target)) hits.add(target);
-            }
-            const viaAlias = new Set(hits);
-            for (const key of keys) {
-                const r = byKey.get(key);
-                if (r && (r.fein_count < 2 || viaAlias.has(key))) hits.add(key);
+            const aliased = keys.filter(k => aliasMap.has(k));
+            if (aliased.length) {
+                for (const k of aliased) for (const t of aliasMap.get(k)) if (byKey.has(t)) hits.add(t);
+            } else {
+                for (const k of keys) {
+                    const r = byKey.get(k);
+                    if (r && r.fein_count === 1) hits.add(k);
+                }
             }
             if (!hits.size) return 'none';
 

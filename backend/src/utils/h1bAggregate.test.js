@@ -66,7 +66,8 @@ describe('createAggregator', () => {
         const agg = createAggregator();
         agg.add(row({ CASE_NUMBER: 'B1', EMPLOYER_NAME: 'ACME HOLDINGS LLC', TRADE_NAME_DBA: 'Acme Labs', EMPLOYER_FEIN: '5' }));
         const keys = agg.result().map(r => r.key).sort();
-        expect(keys).toEqual(['acme', 'acmelabs']);
+        // Strict legal-name keys keep descriptive words like "Holdings".
+        expect(keys).toEqual(['acmeholdings', 'acmelabs']);
     });
 
     it('ignores rows before FY2025 and rows without an employer name', () => {

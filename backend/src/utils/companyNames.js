@@ -40,3 +40,31 @@ export function companyNameKeys(name) {
     const parts = [raw, ...raw.replace(/\([^)]*\)/g, ' ').split('/'), ...[...raw.matchAll(/\(([^)]*)\)/g)].map(m => m[1])];
     return [...new Set(parts.map(normalizeCompanyName).filter(Boolean))];
 }
+
+// Legal-form words only. Used for H-1B matching, where a false match puts
+// another company's numbers on a card, so descriptive words ("AI",
+// "Technologies", "Group", "Holdings") are kept: "Figure AI" ≠ "Figure Technologies".
+const LEGAL_SUFFIXES = new Set([
+    'inc', 'incorporated', 'llc', 'ltd', 'limited', 'corp', 'corporation', 'co', 'company',
+    'the', 'plc', 'lp', 'llp', 'pc', 'pllc', 'na',
+]);
+
+export function normalizeLegalName(name) {
+    const words = String(name || '')
+        .toLowerCase()
+        .normalize('NFKD').replace(/[̀-ͯ]/g, '')
+        .replace(/&/g, ' and ')
+        .replace(/\.(com|io|ai|co)\b/g, ' ')
+        .replace(/\([^)]*\)/g, ' ')
+        .split(/[^a-z0-9]+/)
+        .filter(Boolean);
+    const core = words.filter(w => !LEGAL_SUFFIXES.has(w));
+    return (core.length ? core : words).join('');
+}
+
+/** Strict lookup keys: the whole name, each "A / B" part, and a "(alias)". */
+export function legalNameKeys(name) {
+    const raw = String(name || '');
+    const parts = [raw, ...raw.replace(/\([^)]*\)/g, ' ').split('/'), ...[...raw.matchAll(/\(([^)]*)\)/g)].map(m => m[1])];
+    return [...new Set(parts.map(normalizeLegalName).filter(Boolean))];
+}

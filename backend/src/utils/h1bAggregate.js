@@ -4,7 +4,7 @@
  * attorney and preparer fields are never read.
  */
 
-import { normalizeCompanyName } from './companyNames.js';
+import { normalizeLegalName } from './companyNames.js';
 
 const MIN_FISCAL_YEAR = 2025;
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -65,9 +65,9 @@ export function createAggregator() {
             const fy = fiscalYearOf(date);
             if (fy < MIN_FISCAL_YEAR) return;
 
-            const keys = new Set([normalizeCompanyName(employer)]);
+            const keys = new Set([normalizeLegalName(employer)]);
             const dba = String(row.TRADE_NAME_DBA ?? '').trim();
-            if (dba) keys.add(normalizeCompanyName(dba));
+            if (dba) keys.add(normalizeLegalName(dba));
             for (const key of keys) if (key) addTo(key, employer, row, date, fy);
         },
 
