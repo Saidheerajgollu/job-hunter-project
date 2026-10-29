@@ -246,6 +246,7 @@ export function buildJobQueryFilters({
     search,
     fresh_only,
     has_salary,
+    hide_no_sponsorship,
     max_age_days,
     experience,
     us_only = true,
@@ -275,6 +276,10 @@ export function buildJobQueryFilters({
 
     if (fresh_only) {
         conditions.push(`${PORTAL_DATE_SQL} >= now() - interval '24 hours'`);
+    }
+
+    if (hide_no_sponsorship) {
+        conditions.push(`visa_wording IS DISTINCT FROM 'no_sponsorship'`);
     }
 
     if (has_salary) {

@@ -36,3 +36,13 @@ describe('US-only filter', () => {
         expect(sql).toContain('NOT ILIKE');
     });
 });
+
+describe('hide_no_sponsorship filter', () => {
+    it('excludes jobs whose posting says no sponsorship (keeps unknown ones)', () => {
+        expect(buildJobQueryFilters({ hide_no_sponsorship: true }).where).toContain("visa_wording IS DISTINCT FROM 'no_sponsorship'");
+    });
+
+    it('adds nothing when the flag is off', () => {
+        expect(buildJobQueryFilters({}).where).not.toContain('visa_wording');
+    });
+});
