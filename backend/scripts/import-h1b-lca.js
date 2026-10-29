@@ -11,13 +11,14 @@
  * Only per-employer counts are stored; the table is replaced in one transaction.
  */
 import 'dotenv/config';
-import { initDb, replaceH1bEmployers } from '../src/db.js';
+import { initDb, replaceH1bEmployers, countH1bEmployers } from '../src/db.js';
 import { readLcaRows } from '../src/utils/lcaReader.js';
-import { createAggregator, isCountedFiling } from '../src/utils/h1bAggregate.js';
+import { createAggregator, isCountedFiling, checkImportSize } from '../src/utils/h1bAggregate.js';
 
-const files = process.argv.slice(2);
+const force = process.argv.includes('--force');
+const files = process.argv.slice(2).filter(a => a !== '--force');
 if (!files.length) {
-    console.error('Usage: node scripts/import-h1b-lca.js <LCA_Disclosure_Data_FY20XX_QX.xlsx> [more.xlsx]');
+    console.error('Usage: node scripts/import-h1b-lca.js <LCA_Disclosure_Data_FY20XX_QX.xlsx> [more.xlsx] [--force]');
     process.exit(1);
 }
 
@@ -36,6 +37,7 @@ try {
         console.log(`📄 ${file}: ${read.toLocaleString()} rows, ${counted.toLocaleString()} certified H-1B (${((Date.now() - t0) / 1000).toFixed(0)}s)`);
     }
     const employers = agg.result();
+    checkImportSize(employers.length, await countH1bEmployers(), { force });
     const written = await replaceH1bEmployers(employers);
     const filings = employers.reduce((n, e) => n + e.filings, 0);
     console.log(`✅ Stored ${written.toLocaleString()} employer keys (${filings.toLocaleString()} filings counted, FY2025+ only)`);

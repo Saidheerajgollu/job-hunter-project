@@ -10,9 +10,12 @@
 
 import unzipper from 'unzipper';
 import { SaxesParser } from 'saxes';
+import { StringDecoder } from 'string_decoder';
 
-export const REQUIRED_COLUMNS = ['CASE_NUMBER', 'CASE_STATUS', 'VISA_CLASS', 'DECISION_DATE', 'EMPLOYER_NAME'];
-const OPTIONAL_COLUMNS = ['TRADE_NAME_DBA', 'EMPLOYER_FEIN'];
+// EMPLOYER_FEIN is required: without it the "several employers share this
+// name" check can't run and every name collision would be trusted.
+export const REQUIRED_COLUMNS = ['CASE_NUMBER', 'CASE_STATUS', 'VISA_CLASS', 'DECISION_DATE', 'EMPLOYER_NAME', 'EMPLOYER_FEIN'];
+const OPTIONAL_COLUMNS = ['TRADE_NAME_DBA'];
 const WANTED = [...REQUIRED_COLUMNS, ...OPTIONAL_COLUMNS];
 
 /** "AB12" → 27 (0-based column index). */
@@ -26,13 +29,24 @@ function columnIndex(ref) {
     return n - 1;
 }
 
-/** Feed an entry's bytes through a SAX parser; `onChunkDone` runs after each chunk. */
+/** Decode a byte stream as UTF-8 text without breaking characters split across chunks. */
+export async function* decodeUtf8Chunks(chunks) {
+    const decoder = new StringDecoder('utf8');
+    for await (const chunk of chunks) {
+        const text = decoder.write(chunk);
+        if (text) yield text;
+    }
+    const rest = decoder.end();
+    if (rest) yield rest;
+}
+
+/** Feed an entry's text through a SAX parser, yielding items as `setup` emits them. */
 async function* parseEntry(entry, setup) {
     const parser = new SaxesParser();
     const ready = [];
     setup(parser, item => ready.push(item));
-    for await (const chunk of entry.stream()) {
-        parser.write(chunk.toString('utf8'));
+    for await (const text of decodeUtf8Chunks(entry.stream())) {
+        parser.write(text);
         while (ready.length) yield ready.shift();
     }
     parser.close();
@@ -75,10 +89,15 @@ export async function* readLcaRows(file) {
 
     let columns = null; // [field name, 0-based column index]
     const rows = parseEntry(sheet, (p, emit) => {
-        let row = null, cell = null, inValue = false;
+        let row = null, cell = null, inValue = false, nextCol = 0;
         p.on('opentag', t => {
-            if (t.name === 'row') row = new Map();
-            else if (t.name === 'c' && row) cell = { col: columnIndex(t.attributes.r || ''), type: t.attributes.t || 'n', v: '' };
+            if (t.name === 'row') { row = new Map(); nextCol = 0; }
+            else if (t.name === 'c' && row) {
+                // r="AB12" is optional in the format; without it a cell is the next column.
+                const col = t.attributes.r ? columnIndex(t.attributes.r) : nextCol;
+                nextCol = col + 1;
+                cell = { col, type: t.attributes.t || 'n', v: '' };
+            }
             else if ((t.name === 'v' || t.name === 't') && cell) inValue = true;
         });
         p.on('text', txt => { if (inValue && cell) cell.v += txt; });

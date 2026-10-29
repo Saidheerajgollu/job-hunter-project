@@ -84,3 +84,15 @@ export function createAggregator() {
         },
     };
 }
+
+/**
+ * Guard before replacing h1b_employers: an empty result always means a bad
+ * file, and a result under half the current table usually does (a wrong
+ * file, a renamed column). The site keeps its current data unless forced.
+ */
+export function checkImportSize(newCount, currentCount, { force = false } = {}) {
+    if (newCount === 0) throw new Error('import produced no employers — check the file (wrong file or changed columns?)');
+    if (currentCount > 0 && newCount < currentCount * 0.5 && !force) {
+        throw new Error(`import produced ${newCount} employers, under half of the ${currentCount} stored now — rerun with --force if this is expected`);
+    }
+}

@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { readLcaRows, REQUIRED_COLUMNS } from './lcaReader.js';
+import { readLcaRows, REQUIRED_COLUMNS, decodeUtf8Chunks } from './lcaReader.js';
 import { createAggregator } from './h1bAggregate.js';
 
 let dir;
@@ -28,6 +29,15 @@ beforeAll(async () => {
         ['I-5', 'Certified', new Date(Date.UTC(2024, 5, 1)), 'H-1B', 'SWE', 'OLDCO INC', '', '22', '', ''],
     ]);
     await writeXlsx(path.join(dir, 'bad.xlsx'), [['x', 'y']], ['FOO', 'BAR']);
+    // Same sample, but data-row cells carry no r="A2" position attribute
+    // (allowed by the format; some non-Excel writers omit it).
+    const zip = await JSZip.loadAsync(fs.readFileSync(path.join(dir, 'sample.xlsx')));
+    const sheetPath = Object.keys(zip.files).find(p => /^xl\/worksheets\/sheet\d+\.xml$/.test(p));
+    const xml = await zip.file(sheetPath).async('string');
+    const stripped = xml.replace(/(<row [^>]*r="(\d+)"[^>]*>)([\s\S]*?)(<\/row>)/g, (m, open, n, body, close) =>
+        n === '1' ? m : open + body.replace(/ r="[A-Z]+\d+"/g, '') + close);
+    zip.file(sheetPath, stripped);
+    fs.writeFileSync(path.join(dir, 'no-refs.xlsx'), await zip.generateAsync({ type: 'nodebuffer' }));
 });
 
 afterAll(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -62,9 +72,28 @@ describe('readLcaRows', () => {
         expect(runs[0]).toContain('STRIPE INC');
     });
 
+    it('reads cells that have no position attribute in column order', async () => {
+        const rows = [];
+        for await (const row of readLcaRows(path.join(dir, 'no-refs.xlsx'))) rows.push(row);
+        expect(rows).toHaveLength(6);
+        expect(rows[0]).toMatchObject({ CASE_NUMBER: 'I-1', CASE_STATUS: 'Certified', VISA_CLASS: 'H-1B', EMPLOYER_NAME: 'STRIPE INC', EMPLOYER_FEIN: '11' });
+    });
+
     it('fails with a clear message when a required column is missing', async () => {
         const read = async () => { for await (const _ of readLcaRows(path.join(dir, 'bad.xlsx'))) { /* drain */ } };
         await expect(read()).rejects.toThrow(/missing required column/i);
-        expect(REQUIRED_COLUMNS).toEqual(['CASE_NUMBER', 'CASE_STATUS', 'VISA_CLASS', 'DECISION_DATE', 'EMPLOYER_NAME']);
+        expect(REQUIRED_COLUMNS).toEqual(['CASE_NUMBER', 'CASE_STATUS', 'VISA_CLASS', 'DECISION_DATE', 'EMPLOYER_NAME', 'EMPLOYER_FEIN']);
+    });
+});
+
+
+describe('decodeUtf8Chunks', () => {
+    it('keeps a multi-byte character intact when a chunk boundary splits it', async () => {
+        const bytes = Buffer.from('Société Générale', 'utf8');
+        const split = bytes.indexOf(0xc3) + 1; // cut inside "é"
+        async function* chunks() { yield bytes.subarray(0, split); yield bytes.subarray(split); }
+        let text = '';
+        for await (const t of decodeUtf8Chunks(chunks())) text += t;
+        expect(text).toBe('Société Générale');
     });
 });

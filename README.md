@@ -43,7 +43,7 @@ The Labor Department site blocks automated downloads, so this is a manual step.
    ```bash
    node scripts/import-h1b-lca.js ~/Downloads/LCA_Disclosure_Data_FY2025_Q4.xlsx ~/Downloads/LCA_Disclosure_Data_FY2026_Q3.xlsx
    ```
-   The table is replaced in one step, so a failed import keeps the old numbers. Only per-company counts are stored, never contact or attorney details.
+   The table is replaced in one step, so a failed import keeps the old numbers. An import that finds no employers, or less than half of what's stored now, is refused (add `--force` if a smaller result is expected). Only per-company counts are stored, never contact or attorney details.
 3. When a new FY2026 quarter comes out, rerun with that file instead. When FY2027 files start, drop FY2025.
 4. If a big company shows `no data available`, add its government entity names to `backend/src/presets/h1bAliases.js`.
 

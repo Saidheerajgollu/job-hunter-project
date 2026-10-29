@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseLcaDate, isCountedFiling, fiscalYearOf, createAggregator } from './h1bAggregate.js';
+import { parseLcaDate, isCountedFiling, fiscalYearOf, createAggregator, checkImportSize } from './h1bAggregate.js';
 
 const day = d => d.toISOString().slice(0, 10);
 
@@ -81,5 +81,23 @@ describe('createAggregator', () => {
         const agg = createAggregator();
         agg.add(row({ CASE_NUMBER: 'D1', EMPLOYER_NAME: 'STRIPE INC', EMPLOYER_FEIN: '9', EMPLOYER_POC_EMAIL: 'x@y.com', AGENT_ATTORNEY_LAST_NAME: 'Doe' }));
         expect(Object.keys(agg.result()[0]).sort()).toEqual(['display_name', 'fein_count', 'filings', 'key', 'last_decision_date', 'max_fy', 'min_fy']);
+    });
+});
+
+
+describe('checkImportSize', () => {
+    it('refuses an import that produced no employers', () => {
+        expect(() => checkImportSize(0, 0)).toThrow(/no employers/i);
+        expect(() => checkImportSize(0, 50000, { force: true })).toThrow(/no employers/i);
+    });
+
+    it('refuses an import less than half the size of the current table unless forced', () => {
+        expect(() => checkImportSize(10000, 50000)).toThrow(/--force/);
+        expect(() => checkImportSize(10000, 50000, { force: true })).not.toThrow();
+    });
+
+    it('accepts a normal-sized or first import', () => {
+        expect(() => checkImportSize(48000, 50000)).not.toThrow();
+        expect(() => checkImportSize(40000, 0)).not.toThrow();
     });
 });

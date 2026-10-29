@@ -617,6 +617,11 @@ export async function replaceH1bEmployers(rows) {
     }
 }
 
+export async function countH1bEmployers() {
+    const res = await pool.query('SELECT COUNT(*)::int AS n FROM h1b_employers');
+    return res.rows[0].n;
+}
+
 export async function getH1bEmployers() {
     const res = await pool.query(
         `SELECT key, display_name, filings, to_char(last_decision_date, 'YYYY-MM-DD') AS last_decision_date,
