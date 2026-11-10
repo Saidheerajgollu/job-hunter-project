@@ -159,6 +159,13 @@ export async function initDb() {
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_jobs_portal_date ON jobs ((${PORTAL_DATE_SQL}) DESC)`);
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_jobs_dedup ON jobs (${DEDUP_KEY_SQL}) WHERE closed_at IS NULL`);
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS company_domains (
+        company TEXT PRIMARY KEY,
+        domain TEXT,
+        source TEXT NOT NULL,
+        checked_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )`);
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS h1b_employers (
         key TEXT PRIMARY KEY,
         display_name TEXT NOT NULL,
@@ -622,6 +629,50 @@ export async function upsertSetting(key, value) {
 }
 
 // ── Watched Companies ─────────────────────────────────────────────────────────
+
+// ── Company websites (for logos) ─────────────────────────────────────────────
+
+/** company → domain for every company with a known website. */
+export async function getCompanyDomains() {
+    const res = await pool.query(`SELECT company, domain FROM company_domains WHERE domain IS NOT NULL`);
+    return new Map(res.rows.map(r => [r.company, r.domain]));
+}
+
+/**
+ * Save websites. A 'feed' value (from the company's own links or a scraper)
+ * is never overwritten by a 'lookup' value; a lookup miss is stored as NULL
+ * so it isn't asked again for 30 days.
+ */
+export async function upsertCompanyDomains(rows) {
+    if (!rows.length) return 0;
+    const res = await pool.query(
+        `INSERT INTO company_domains (company, domain, source, checked_at)
+         SELECT c, d, s, now() FROM unnest($1::text[], $2::text[], $3::text[]) AS t(c, d, s)
+         ON CONFLICT (company) DO UPDATE
+           SET domain = EXCLUDED.domain, source = EXCLUDED.source, checked_at = now()
+           WHERE company_domains.source <> 'feed' OR EXCLUDED.source = 'feed'`,
+        [rows.map(r => r.company), rows.map(r => r.domain), rows.map(r => r.source)]
+    );
+    return res.rowCount;
+}
+
+/** Company and URL of every open feed job (for reading websites off job links). */
+export async function getOpenJobUrls() {
+    const res = await pool.query(`SELECT company, url FROM jobs WHERE closed_at IS NULL AND us_ineligible IS NOT TRUE`);
+    return res.rows;
+}
+
+/** Open feed companies with no website yet: never looked up, or a miss over 30 days old. */
+export async function companiesNeedingDomainLookup(limit) {
+    const res = await pool.query(
+        `SELECT j.company FROM (SELECT DISTINCT company FROM jobs WHERE closed_at IS NULL AND us_ineligible IS NOT TRUE) j
+         LEFT JOIN company_domains d ON d.company = j.company
+         WHERE d.company IS NULL OR (d.domain IS NULL AND d.source = 'lookup' AND d.checked_at < now() - interval '30 days')
+         LIMIT $1`,
+        [limit]
+    );
+    return res.rows.map(r => r.company);
+}
 
 // ── H-1B employer filings (DOL LCA data, imported by scripts/import-h1b-lca.js) ──
 

@@ -12,7 +12,7 @@ import { makeJobId, isSeniorRole, classifyCategory, isUSCompatible, toIsoDate } 
  * `postedAtEstimated` marks dates the source doesn't really provide, so
  * insertJob never treats them as a repost or overwrites a stored date.
  */
-export function toCareerSiteJob({ title, company, location, url, source, postedAt, postedAtEstimated = false, description = null }, filterSenior) {
+export function toCareerSiteJob({ title, company, location, url, source, postedAt, postedAtEstimated = false, description = null, companyDomain = null }, filterSenior) {
     const cleanTitle = (title || '').trim();
     if (!cleanTitle || !url) return null;
     if (filterSenior && isSeniorRole(cleanTitle)) return null;
@@ -35,6 +35,7 @@ export function toCareerSiteJob({ title, company, location, url, source, postedA
         description: description ? String(description).slice(0, 500) : null,
         posted_at: toIsoDate(postedAt),
         ...(postedAtEstimated ? { posted_at_estimated: true } : {}),
+        ...(companyDomain ? { company_domain: companyDomain } : {}),
     };
 }
 

@@ -22,7 +22,8 @@ import { scrapeEightfold } from './scrapers/eightfold.js';
 import { scrapeByteDance } from './scrapers/bytedance.js';
 import { scrapeOracleCloud } from './scrapers/oraclecloud.js';
 import { discoverATSCompanies, emptyDiscovery } from './utils/discoverCompanies.js';
-import { insertJob, startScrapeRun, finishScrapeRun, getAllSettings, expireUnseenJobs, closeDuplicateJobs } from './db.js';
+import { insertJob, startScrapeRun, finishScrapeRun, getAllSettings, expireUnseenJobs, closeDuplicateJobs, upsertCompanyDomains } from './db.js';
+import { resolveFromJobUrls, resolveByLookup } from './companyDomains.js';
 import { isEligibleJob } from './utils/helpers.js';
 
 
@@ -35,6 +36,7 @@ export async function runScraper() {
     console.log(`🔍 Filter senior roles: ${filterSenior}`);
 
     const runId = await startScrapeRun();
+    const knownDomains = new Map(); // company → website reported by a scraper
 
     let totalFound = 0;
     let totalNew = 0;
@@ -70,6 +72,7 @@ export async function runScraper() {
     await Promise.allSettled(apiScrapers.map(async ({ name, fn }) => {
         try {
             const found = await fn();
+            for (const j of found) if (j.company_domain && j.company) knownDomains.set(j.company, j.company_domain);
             const newJobs = await saveJobs(found);
             totalFound += found.length;
             totalNew += newJobs;
@@ -90,6 +93,17 @@ export async function runScraper() {
     if (expired) console.log(`🧹 Closed ${expired} listing(s) not seen for 7 days`);
     const dupes = await closeDuplicateJobs().catch(() => 0);
     if (dupes) console.log(`🧹 Closed ${dupes} duplicate listing(s)`);
+
+    // Company websites for logos: from scrapers that know them, the companies'
+    // own job links, then (unambiguous only) a name lookup.
+    try {
+        await upsertCompanyDomains([...knownDomains].map(([company, domain]) => ({ company, domain, source: 'feed' })));
+        const fromLinks = await resolveFromJobUrls();
+        const looked = await resolveByLookup(300);
+        console.log(`🖼  Company websites: ${knownDomains.size} from scrapers, ${fromLinks} from job links, ${looked} looked up`);
+    } catch (err) {
+        console.error(`❌ Company websites: ${err.message}`);
+    }
 
     console.log(`\n✅ Scrape complete! Found: ${totalFound} | New: ${totalNew} | Errors: ${errors.length}`);
     console.log('─'.repeat(60));

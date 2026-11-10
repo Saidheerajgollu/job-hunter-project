@@ -17,6 +17,7 @@ const PAGES_PER_TERM = 2;
 const SITES = [
     {
         company: 'TikTok',
+        domain: 'tiktok.com',
         endpoint: 'https://api.lifeattiktok.com/api/v1/public/supplier/search/job/posts',
         headers: { 'website-path': 'tiktok' },
         body: {},
@@ -24,6 +25,7 @@ const SITES = [
     },
     {
         company: 'ByteDance',
+        domain: 'bytedance.com',
         endpoint: 'https://jobs.bytedance.com/api/v1/search/job/posts',
         headers: { 'website-path': 'en' },
         body: { portal_type: 2 },
@@ -64,6 +66,7 @@ export function parseByteDanceJob(post, site, filterSenior) {
         location: chain.join(', '),
         url: site.jobUrl(post.id),
         source: 'bytedance',
+        companyDomain: site.domain,
         postedAt: new Date().toISOString(),
         postedAtEstimated: true,
         description: post.description,

@@ -17,6 +17,8 @@ export interface Job {
     scraped_at: string;
     closed_at: string | null;
     visa_wording: 'no_sponsorship' | 'sponsors' | null;
+    /** Company website (e.g. "stripe.com") for its logo, or null when unknown. */
+    company_domain: string | null;
     /** Company's FY25–26 H-1B record: summary, 'none' (no usable match), or null (no data imported). */
     h1b: H1bSummary | 'none' | null;
     is_reposted: number;

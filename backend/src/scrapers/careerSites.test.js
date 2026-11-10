@@ -175,3 +175,18 @@ describe('parseOracleRequisition', () => {
         }, { company: 'X', host: 'x.fa.oraclecloud.com', site: 'CX_1' }, true)).toBeNull();
     });
 });
+
+describe('company website for logos', () => {
+    it('career-site parsers attach the company domain', () => {
+        const amazon = parseAmazonJob({ title: 'Software Development Engineer', job_path: '/en/jobs/1/sde', normalized_location: 'Seattle, Washington, USA', posted_date: 'October 27, 2026' }, true);
+        expect(amazon.company_domain).toBe('amazon.com');
+
+        const { jobs } = parseEightfoldPage({ count: 1, positions: [{ id: 1, name: 'Software Engineer 4', locations: ['Los Gatos,California,United States of America'], t_create: 1792627200 }] },
+            { company: 'Netflix', host: 'explore.jobs.netflix.net', domain: 'netflix.com' }, true);
+        expect(jobs[0].company_domain).toBe('netflix.com');
+
+        const tiktok = parseByteDanceJob({ id: '1', title: 'Software Engineer', city_info: { en_name: 'San Jose', parent: { en_name: 'California', parent: { en_name: 'United States of America' } } } },
+            { company: 'TikTok', domain: 'tiktok.com', jobUrl: id => `https://lifeattiktok.com/search/${id}` }, true);
+        expect(tiktok.company_domain).toBe('tiktok.com');
+    });
+});

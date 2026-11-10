@@ -131,3 +131,12 @@ describe('US location signal (shared by isUSCompatible and the feed SQL filter)'
     });
 
 });
+
+describe('classifyCategory — software development engineer titles', () => {
+    it('treats "Software Development Engineer" (Amazon\'s main SWE title) as SWE', async () => {
+        const { classifyCategory } = await import('./helpers.js');
+        expect(classifyCategory('Software Development Engineer')).toBe('swe');
+        expect(classifyCategory('Software Development Engineer, AWS')).toBe('swe');
+        expect(classifyCategory('Software Dev Engineer')).toBe('swe');
+    });
+});

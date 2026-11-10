@@ -197,7 +197,7 @@ export function classifyCategory(title, description = '') {
 
     // ── Explicit SWE — must match before falling through to null ─────────────────
     // Only real engineering/developer/programmer titles qualify
-    if (/\b(software engineer|software developer|software programmer|swe\b|sde\b)\b/.test(t)) return 'swe';
+    if (/\b(software engineer|software developer|software programmer|software dev(elopment)? engineer|swe\b|sde\b)\b/.test(t)) return 'swe';
     if (/\b(applications? engineer|application developer|engineer (i|ii|iii|iv|1|2|3))\b/.test(t)) return 'swe';
     if (/\b(embedded engineer|embedded developer|firmware engineer|systems engineer|systems developer)\b/.test(t)) return 'swe';
     if (/\b(game engineer|game developer|graphics engineer|simulation engineer)\b/.test(t)) return 'swe';

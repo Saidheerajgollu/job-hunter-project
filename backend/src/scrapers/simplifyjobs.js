@@ -8,6 +8,7 @@
  */
 
 import { makeJobId, isSeniorRole, classifyCategory } from '../utils/helpers.js';
+import { domainFromUrl } from '../utils/companyDomain.js';
 
 const LISTINGS_URL =
     'https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json';
@@ -82,6 +83,7 @@ export async function scrapeSimplifyJobs(filterSenior = true) {
                 location,
                 url: listing.url,
                 source: 'simplifyjobs',
+                company_domain: listing.company_url ? domainFromUrl(listing.company_url) : null,
                 category,
                 salary: null,
                 // Surface Simplify's explicit flag so isEligibleJob's citizenship

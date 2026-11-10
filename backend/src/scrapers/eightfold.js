@@ -31,6 +31,7 @@ export function parseEightfoldPage(body, tenant, filterSenior) {
             location: (p.standardizedLocations || p.locations || [p.location]).filter(Boolean).join(' | '),
             url: rawUrl.startsWith('http') ? rawUrl : `https://${tenant.host}${rawUrl}`,
             source: 'eightfold',
+            companyDomain: tenant.domain,
             postedAt: p.t_create || p.postedTs,
             description: p.job_description,
         }, filterSenior);

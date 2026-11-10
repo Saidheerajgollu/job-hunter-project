@@ -26,6 +26,7 @@ export function parseAppleHtml(html, filterSenior) {
             location: [loc.name, loc.countryName].filter(Boolean).join(', '),
             url: `${BASE}/en-us/details/${r.positionId}/${r.transformedPostingTitle || ''}`,
             source: 'apple',
+            companyDomain: 'apple.com',
             postedAt: r.postDateInGMT || r.postingDate,
         }, filterSenior);
         if (job) jobs.push(job);

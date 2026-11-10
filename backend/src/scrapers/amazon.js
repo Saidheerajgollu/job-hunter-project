@@ -19,6 +19,7 @@ export function parseAmazonJob(row, filterSenior) {
         location: row.normalized_location || row.location,
         url: path.startsWith('http') ? path : `${ORIGIN}${path}`,
         source: 'amazon',
+        companyDomain: 'amazon.com',
         postedAt: row.posted_date,
         description: row.description_short,
     }, filterSenior);

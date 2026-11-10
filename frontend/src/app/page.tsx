@@ -364,6 +364,33 @@ function FilterBar({ filters, onChange, onScrape, scraping, h1bAvailable }: Filt
 
 // ── JobCard ───────────────────────────────────────────────────────────────────
 
+/**
+ * Company icon from its website (Google's public favicon service), or the
+ * company's initials when the website is unknown or has no icon.
+ */
+function CompanyLogo({ company, domain, initials, color }: { company: string; domain: string | null; initials: string; color: string }) {
+    const [failed, setFailed] = useState(false);
+    useEffect(() => setFailed(false), [domain]);
+    const showImage = !!domain && !failed;
+    return (
+        <div className="company-logo" style={{ color: `#${color}` }}>
+            {showImage ? (
+                <img
+                    src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`}
+                    alt={`${company} logo`}
+                    loading="lazy"
+                    referrerPolicy="no-referrer"
+                    onError={() => setFailed(true)}
+                    // Unknown sites get Google's generic 16px globe; show initials instead.
+                    onLoad={e => { if (e.currentTarget.naturalWidth <= 16) setFailed(true); }}
+                />
+            ) : (
+                <span aria-hidden="true">{initials}</span>
+            )}
+        </div>
+    );
+}
+
 function JobCard({ job }: { job: Job }) {
     const initials = getCompanyInitials(job.company);
     const color = getCompanyColor(job.company);
@@ -383,17 +410,7 @@ function JobCard({ job }: { job: Job }) {
     return (
         <div className="job-card-wrap">
             <div className="job-card">
-                <div className="company-logo" style={{ color: `#${color}` }}>
-                    <img
-                        src={`https://logo.clearbit.com/${encodeURIComponent(job.company.toLowerCase().replace(/\s/g, ''))}.com`}
-                        alt={job.company}
-                        onError={e => {
-                            (e.target as HTMLImageElement).style.display = 'none';
-                            (e.target as HTMLImageElement).nextElementSibling!.textContent = initials;
-                        }}
-                    />
-                    <span style={{ display: 'none' }}>{initials}</span>
-                </div>
+                <CompanyLogo company={job.company} domain={job.company_domain} initials={initials} color={color} />
 
                 <div className="job-info">
                     <div className="job-title">{job.title}</div>

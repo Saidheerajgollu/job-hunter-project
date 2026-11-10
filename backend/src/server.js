@@ -17,6 +17,7 @@ import {
 import { classifyCategory, makeJobId } from './utils/helpers.js';
 import { getH1bIndex, attachH1b, h1bCompanyNames } from './h1bLookup.js';
 import { syncH1bSnapshot } from './h1bSnapshot.js';
+import { attachCompanyDomains } from './companyDomains.js';
 import { detectATS } from './utils/atsDetector.js';
 import { DEFAULT_WATCH_ROLES_JSON } from './utils/roleFilters.js';
 import { initPush, getVapidPublicKey, sendPushToAll } from './utils/pushNotifications.js';
@@ -84,7 +85,7 @@ app.get('/api/jobs', wrap(async (req, res) => {
     if (h1b_only === '1' && !h1bIndex.isEmpty()) params.h1b_companies = await sponsorCompanyNames(h1bIndex);
 
     const [jobs, total] = await Promise.all([getJobs(params), countJobs(params)]);
-    res.json({ jobs: attachH1b(jobs, h1bIndex), total, page: pageNum, limit: pageSize });
+    res.json({ jobs: await attachCompanyDomains(attachH1b(jobs, h1bIndex)), total, page: pageNum, limit: pageSize });
 }));
 
 // Re-classify all existing jobs using the latest classifyCategory logic

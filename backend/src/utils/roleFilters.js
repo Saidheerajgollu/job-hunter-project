@@ -12,6 +12,8 @@ export const ROLE_TITLE_KEYWORDS = {
         'software engineer',
         'software developer',
         'software eng',
+        'software development engineer',
+        'software dev engineer',
         'software programmer',
         'applications engineer',
         'application developer',
