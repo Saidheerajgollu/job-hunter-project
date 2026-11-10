@@ -263,6 +263,18 @@ export async function initDb() {
                AND posted_at - previous_posted_at < interval '3 days'`
         );
     }
+    //  - Rotate the Web Push (VAPID) keys once: the old private key was exposed
+    //    by the removed public /api/settings endpoint. Subscriptions are bound to
+    //    the old public key, so they're cleared too; initPush() then generates a
+    //    new pair and browsers re-subscribe automatically on their next visit.
+    const vapidRotate = await pool.query(
+        `INSERT INTO settings (key, value) VALUES ('migration_vapid_rotate_2026_11', 'done')
+         ON CONFLICT (key) DO NOTHING`
+    );
+    if (vapidRotate.rowCount > 0) {
+        await pool.query(`DELETE FROM settings WHERE key IN ('vapid_public_key', 'vapid_private_key')`);
+        await pool.query(`DELETE FROM push_subscriptions`);
+    }
     //  - visa_wording (what a posting says about sponsorship) for rows saved
     //    before the column existed. New rows get it in insertJob.
     await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS visa_wording TEXT`);

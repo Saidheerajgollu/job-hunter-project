@@ -20,15 +20,29 @@ function urlBase64ToUint8Array(base64String: string) {
     return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
+function sameKey(a: ArrayBuffer | null | undefined, b: Uint8Array) {
+    if (!a) return false;
+    const x = new Uint8Array(a);
+    return x.length === b.length && x.every((v, i) => v === b[i]);
+}
+
+/**
+ * Subscribe this browser to push alerts with the server's current key. A
+ * subscription made with an older key (the server rotated it) is replaced.
+ */
 async function subscribeToPush(): Promise<PushSubscription | null> {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
     try {
         const reg = await navigator.serviceWorker.register('/sw.js');
         const { key } = await api.getVapidPublicKey();
-        const sub = await reg.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(key),
-        });
+        const serverKey = urlBase64ToUint8Array(key);
+        const existing = await reg.pushManager.getSubscription();
+        if (existing && !sameKey(existing.options.applicationServerKey, serverKey)) {
+            await existing.unsubscribe();
+        }
+        const sub = (existing && sameKey(existing.options.applicationServerKey, serverKey))
+            ? existing
+            : await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: serverKey });
         await api.savePushSubscription(sub.toJSON());
         return sub;
     } catch (err) {
@@ -232,6 +246,8 @@ export function NotificationBell() {
     useEffect(() => {
         if (!('Notification' in window)) { setPermission('unsupported'); return; }
         setPermission(Notification.permission);
+        // Already allowed: make sure the subscription uses the server's current key.
+        if (Notification.permission === 'granted') subscribeToPush();
     }, []);
 
     async function handleEnable() {
