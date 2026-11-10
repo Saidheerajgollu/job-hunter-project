@@ -519,7 +519,6 @@ export default function Home() {
     const [loading, setLoading] = useState(true);
     const [scraping, setScraping] = useState(false);
     const [filters, setFilters] = useState<JobFilters>({ page: 1, limit: 30, us_only: '1', max_age_days: '30' });
-    const [gradLabel, setGradLabel] = useState('2026 new grad');
     const { toasts, show: showToast } = useToast();
 
     const fetchJobs = useCallback(async (f: JobFilters, { quiet = false } = {}) => {
@@ -548,13 +547,6 @@ export default function Home() {
     // H-1B data source info (changes only on a quarterly import).
     useEffect(() => {
         api.getH1bMeta().then(setH1bMeta).catch(() => {});
-    }, []);
-
-    // Fetch grad label from settings (cheap, one-time)
-    useEffect(() => {
-        api.getSettings().then(s => {
-            if (s.grad_label) setGradLabel(s.grad_label);
-        }).catch(() => {});
     }, []);
 
     // Scrapers add jobs all day (ATS boards every 15 min, career sites hourly,
@@ -597,9 +589,7 @@ export default function Home() {
                         Job Hunter
                     </a>
                     <div className="navbar-actions">
-                        <span className="navbar-tag">{gradLabel}</span>
-                        <span className="navbar-divider" aria-hidden />
-                        <a href="/settings" className="btn btn-ghost btn-sm">Settings</a>
+                        <span className="navbar-tag">2026 new grad</span>
                     </div>
                 </div>
             </nav>

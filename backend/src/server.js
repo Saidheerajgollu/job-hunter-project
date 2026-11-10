@@ -9,7 +9,7 @@ import { startScheduler, triggerScrape, triggerFastAtsPoll, triggerWatcher } fro
 import {
     initDb,
     getJobs, countJobs, getH1bMeta, getOpenCompanyNames,
-    getStats, getAllSettings, upsertSetting, getLastScrapeRun,
+    getStats, getLastScrapeRun,
     getAllJobsForReclassify, updateJobCategory,
     getWatchedCompanies, getWatchedCompany, insertWatchedCompany, deleteWatchedCompany,
     insertPushSubscription, deletePushSubscription, getRecentWatchNotifications,
@@ -130,23 +130,6 @@ app.post('/api/scrape/run', (_req, res) => {
     triggerScrape().catch(console.error);
     triggerFastAtsPoll().catch(console.error);
 });
-
-// ── Settings ──────────────────────────────────────────────────────────────────
-
-app.get('/api/settings', wrap(async (_req, res) => {
-    res.json(await getAllSettings());
-}));
-
-app.post('/api/settings', wrap(async (req, res) => {
-    const updates = req.body;
-    // Never let API callers overwrite server-managed secrets.
-    const PROTECTED = new Set(['vapid_public_key', 'vapid_private_key']);
-    for (const [key, value] of Object.entries(updates)) {
-        if (PROTECTED.has(key)) continue;
-        await upsertSetting(key, String(value));
-    }
-    res.json({ ok: true, settings: await getAllSettings() });
-}));
 
 // ── Watched Companies ─────────────────────────────────────────────────────────
 

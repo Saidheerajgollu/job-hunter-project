@@ -55,7 +55,6 @@ The Labor Department site blocks automated downloads, so this is a manual step.
 - The page refreshes on its own (stats every 30 seconds, the job list every 5 minutes)
 - Company watchlist: add a company and get browser push alerts when it posts a matching role. If its ATS is found, the board is checked directly every 30 minutes; otherwise the company is matched by name against the jobs all the scrapers collect
 - Watchlist presets for Bay Area, Seattle, and NYC/NJ companies, plus companies found in Web Data Commons' schema.org job data
-- Settings page: hide senior roles (off by default) and set the navbar label
 
 ## Stack
 
@@ -115,7 +114,6 @@ The backend serves JSON under `/api`:
 | `POST /jobs/reclassify` | Re-run role classification on stored jobs |
 | `GET /stats` | Open jobs, last 24h / 7 days, companies, last finished scrape run and whether one is running |
 | `POST /scrape/run` | Start a scrape and an ATS poll now |
-| `GET`/`POST /settings` | Read or update settings |
 | `/companies`, `/companies/presets`, `/companies/bulk`, `/companies/detect`, `/companies/watch/run`, `/companies/repair` | Watchlist |
 | `/push/*`, `GET /notifications` | Push subscriptions and alert history |
 | `GET /health` | Health check |
@@ -161,7 +159,7 @@ backend/
   scripts/           maintenance and check scripts (table above)
   Dockerfile, railway.json
 frontend/
-  src/app/           dashboard (page.tsx) and settings page
+  src/app/           dashboard (page.tsx)
   src/components/    watchlist panel, footer
   src/lib/api.ts     API client
   public/sw.js       service worker for push notifications

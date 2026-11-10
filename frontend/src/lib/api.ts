@@ -138,14 +138,6 @@ export const api = {
     triggerScrape: () =>
         apiFetch<{ ok: boolean; message: string }>('/scrape/run', { method: 'POST' }),
 
-    getSettings: () => apiFetch<Record<string, string>>('/settings'),
-
-    saveSettings: (settings: Record<string, string>) =>
-        apiFetch<{ ok: boolean; settings: Record<string, string> }>('/settings', {
-            method: 'POST',
-            body: JSON.stringify(settings),
-        }),
-
     // Watched companies
     getWatchedCompanies: () => apiFetch<WatchedCompany[]>('/companies'),
 
