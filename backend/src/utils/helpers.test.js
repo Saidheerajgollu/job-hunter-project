@@ -130,6 +130,35 @@ describe('US location signal (shared by isUSCompatible and the feed SQL filter)'
         expect(isUSCompatible('Tel Aviv, IL')).toBe(false);
     });
 
+    it('rejects non-US places seen leaking into the live feed', async () => {
+        const { isUSCompatible } = await import('./helpers.js');
+        for (const loc of [
+            'UK', 'Cambridge, UK', 'Belfast, UK', 'Toulouse Area', 'Ljubljana', 'ZAGREB, , CROATIA',
+            'Almaty, Kazakhstan', 'Remoto', 'Belo Horizonte, MG', 'Stuttgart', 'Lausanne',
+            'Ottawa, ON, ca', 'Sofia', 'Sofia, Bulgaria', 'Bulgaria', 'Hengelo', 'Belgrade, Serbia',
+            'BELGRADE, SRB', 'Rehovot,ISR', 'Casablanca (DES)', 'Luxembourg', 'Malta', 'Porto',
+            'Quezon City', 'Beirut, Lebanon', 'Turkey', 'Vilnius', 'Amman, JOR', 'Kosice, Slovakia',
+            'United Arab Emirates', 'Delft', 'Nicosia', 'Yerevan', 'Wrocław',
+            // "City, Region, country" where the region code looks like a US state
+            'Madrid, MD, es', 'Chennai, TN, in', 'Bogota, DC, co', 'Budapest, OR, hu', 'Toronto, ON, CA',
+        ]) {
+            expect(isUSCompatible(loc), loc).toBe(false);
+        }
+    });
+
+    it('keeps US places, including ones that share a name with a foreign place', async () => {
+        const { isUSCompatible } = await import('./helpers.js');
+        for (const loc of [
+            'Dallas, Texas', 'Seattle, Washington', 'Savannah, Georgia', 'San Juan, Puerto Rico',
+            'San Francisco', 'Hawaii', 'Albuquerque, New Mexico', 'Boston, New England',
+            'Birmingham, AL', 'Athens, GA', 'Rome, GA', 'Dublin, California', 'Dublin, OH',
+            'Remote - Worldwide', 'North America', 'Home Based - Americas',
+            'Vienna, VA', 'Vienna, VA, US', 'Melbourne, FL', 'Manchester, NH', 'Milan, IL, US', 'Panama City Beach, FL',
+        ]) {
+            expect(isUSCompatible(loc), loc).toBe(true);
+        }
+    });
+
 });
 
 describe('classifyCategory — software development engineer titles', () => {

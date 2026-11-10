@@ -229,31 +229,49 @@ export const NON_US_LOCATION_TERMS = [
     'remote in uk', 'remote in europe', 'remote in india', 'remote in canada',
     // UK
     'united kingdom', 'great britain', 'england', 'scotland', 'wales', 'cambridgeshire',
-    'london', 'manchester', 'edinburgh', 'glasgow', 'bristol', 'leeds', 'cardiff', 'birmingham',
+    'uk', 'london', 'manchester', 'edinburgh', 'glasgow', 'bristol', 'leeds', 'cardiff', 'belfast', 'northern ireland',
     // Europe
-    'switzerland', 'zurich', 'geneva', 'italy', 'milan', 'rome', 'florence', 'turin',
-    'germany', 'berlin', 'munich', 'frankfurt', 'hamburg', 'france', 'paris', 'lyon',
-    'netherlands', 'amsterdam', 'rotterdam', 'spain', 'madrid', 'barcelona', 'portugal', 'lisbon',
+    'switzerland', 'zurich', 'zürich', 'geneva', 'lausanne', 'basel', 'bern', 'italy', 'milan', 'turin', 'bologna',
+    'germany', 'berlin', 'munich', 'frankfurt', 'hamburg', 'stuttgart', 'cologne', 'düsseldorf', 'dusseldorf',
+    'france', 'paris', 'lyon', 'toulouse', 'marseille', 'grenoble', 'sophia antipolis',
+    'netherlands', 'amsterdam', 'rotterdam', 'eindhoven', 'delft', 'utrecht', 'hengelo', 'the hague',
+    'spain', 'madrid', 'barcelona', 'valencia', 'malaga', 'málaga', 'portugal', 'lisbon', 'porto', 'braga',
+    'luxembourg', 'malta', 'cyprus', 'nicosia', 'limassol', 'iceland', 'reykjavik', 'estonia', 'tallinn',
+    'latvia', 'riga', 'lithuania', 'vilnius', 'kaunas', 'slovakia', 'bratislava', 'kosice', 'košice',
+    'slovenia', 'ljubljana', 'croatia', 'zagreb', 'serbia', 'belgrade', 'novi sad',
+    'bulgaria', 'sofia', 'plovdiv', 'bosnia', 'sarajevo', 'north macedonia', 'skopje', 'albania', 'tirana',
+    'montenegro', 'moldova', 'chisinau', 'belarus', 'minsk', 'armenia', 'yerevan', 'azerbaijan', 'baku',
+    'tbilisi', 'kazakhstan', 'almaty', 'astana', 'uzbekistan', 'tashkent',
+    'turkey', 'türkiye', 'turkiye', 'istanbul', 'ankara', 'izmir',
     'ireland', 'dublin', 'belgium', 'brussels', 'austria', 'vienna', 'sweden', 'stockholm',
-    'norway', 'oslo', 'denmark', 'copenhagen', 'finland', 'helsinki', 'poland', 'warsaw', 'krakow', 'kraków',
-    'czech', 'prague', 'romania', 'bucharest', 'hungary', 'budapest', 'greece', 'athens',
+    'gothenburg', 'malmo', 'malmö', 'norway', 'oslo', 'denmark', 'copenhagen', 'aarhus', 'finland', 'helsinki',
+    'poland', 'warsaw', 'krakow', 'kraków', 'wroclaw', 'wrocław', 'gdansk', 'gdańsk', 'poznan', 'poznań',
+    'czech', 'czechia', 'prague', 'brno', 'romania', 'bucharest', 'cluj', 'iasi', 'iași', 'timisoara',
+    'hungary', 'budapest', 'greece', 'thessaloniki',
     'ukraine', 'kyiv', 'kiev', 'russia', 'moscow',
     // Americas (non-US)
     'canada', 'toronto', 'vancouver', 'montreal', 'ottawa', 'calgary',
-    'mexico', 'brazil', 'sao paulo', 'são paulo', 'argentina', 'buenos aires', 'chile', 'santiago',
-    'colombia', 'bogota', 'bogotá', 'peru', 'lima', 'costa rica',
+    'mexico', 'guadalajara', 'monterrey', 'brazil', 'brasil', 'sao paulo', 'são paulo', 'rio de janeiro',
+    'belo horizonte', 'curitiba', 'porto alegre', 'florianopolis', 'florianópolis', 'recife',
+    'argentina', 'buenos aires', 'cordoba', 'córdoba', 'chile', 'colombia', 'bogota', 'bogotá', 'medellin', 'medellín',
+    'peru', 'costa rica', 'san jose, costa rica', 'uruguay', 'montevideo', 'ecuador', 'quito',
+    'guatemala', 'panama', 'dominican republic', 'venezuela', 'remoto', 'remota',
     // Asia-Pacific
     'india', 'mumbai', 'delhi', 'bangalore', 'bengaluru', 'hyderabad', 'chennai', 'pune',
     'gurgaon', 'gurugram', 'noida', 'kolkata', 'ahmedabad', 'jaipur',
     'china', 'beijing', 'shanghai', 'shenzhen', 'guangzhou',
     'japan', 'tokyo', 'osaka', 'south korea', 'seoul', 'singapore', 'hong kong',
     'taiwan', 'taipei', 'australia', 'sydney', 'melbourne', 'brisbane', 'new zealand', 'auckland',
-    'philippines', 'manila', 'vietnam', 'ho chi minh', 'hanoi', 'thailand', 'bangkok',
+    'philippines', 'manila', 'quezon city', 'makati', 'cebu', 'taguig', 'vietnam', 'ho chi minh', 'hanoi',
+    'thailand', 'bangkok',
     'indonesia', 'jakarta', 'malaysia', 'kuala lumpur', 'pakistan', 'karachi', 'lahore',
-    'bangladesh', 'dhaka', 'sri lanka', 'nepal',
+    'bangladesh', 'dhaka', 'sri lanka', 'colombo', 'nepal', 'kathmandu',
     // Middle East / Africa
-    'israel', 'tel aviv', 'uae', 'dubai', 'abu dhabi', 'saudi arabia', 'riyadh', 'qatar', 'doha',
-    'egypt', 'cairo', 'nigeria', 'lagos', 'kenya', 'nairobi', 'south africa', 'johannesburg', 'cape town',
+    'israel', 'tel aviv', 'jerusalem', 'haifa', 'herzliya', 'rehovot', 'petah tikva', 'uae', 'united arab emirates',
+    'dubai', 'abu dhabi', 'saudi arabia', 'riyadh', 'jeddah', 'qatar', 'doha', 'bahrain', 'kuwait', 'oman',
+    'jordan', 'amman', 'beirut', 'egypt', 'cairo', 'morocco', 'casablanca', 'rabat', 'tunisia', 'tunis',
+    'nigeria', 'lagos', 'abuja', 'ghana', 'accra', 'kenya', 'nairobi', 'rwanda', 'kigali', 'uganda', 'ethiopia',
+    'south africa', 'johannesburg', 'cape town',
 ];
 
 const US_STATE_ABBREVS = 'AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC';
@@ -280,7 +298,7 @@ export function getNonUsLocationPgRegex() {
 export const US_LOCATION_TERMS = [
     'united states', 'usa', 'us', 'nyc', 'new york', 'san francisco', 'bay area',
     'silicon valley', 'seattle', 'austin', 'boston', 'chicago', 'los angeles',
-    'denver', 'atlanta',
+    'denver', 'atlanta', 'new mexico', 'new england', 'puerto rico',
 ];
 
 // State codes that double as ISO country codes (IN=India, DE=Germany,
@@ -289,7 +307,29 @@ export const US_LOCATION_TERMS = [
 const AMBIGUOUS_STATE_CODES = new Set(['IN', 'DE', 'IL', 'CO', 'ME', 'PA', 'AR', 'ID', 'LA', 'MA', 'AL', 'GA', 'SC', 'NE', 'MT', 'MN']);
 const UNAMBIGUOUS_STATE_ABBREVS = US_STATE_ABBREVS.split('|').filter(c => !AMBIGUOUS_STATE_CODES.has(c)).join('|');
 const US_STATE_SIGNAL_SRC = `(,|\\||\\-)\\s*(${UNAMBIGUOUS_STATE_ABBREVS})\\s*($|,|\\||\\-)`;
-const usStateOverrideRegex = new RegExp(US_STATE_SIGNAL_SRC, 'i');
+// Upper case only: "Ottawa, ON, ca" is Canada, not California.
+const usStateCodeOverrideRegex = new RegExp(US_STATE_SIGNAL_SRC);
+// Georgia and Washington are left out (a country; a name used abroad).
+const US_STATE_NAMES = [
+    'alabama', 'alaska', 'arizona', 'arkansas', 'california', 'colorado', 'connecticut', 'delaware',
+    'florida', 'hawaii', 'idaho', 'illinois', 'indiana', 'iowa', 'kansas', 'kentucky', 'louisiana',
+    'maine', 'maryland', 'massachusetts', 'michigan', 'minnesota', 'mississippi', 'missouri', 'montana',
+    'nebraska', 'nevada', 'new hampshire', 'new jersey', 'north carolina', 'north dakota', 'ohio',
+    'oklahoma', 'oregon', 'pennsylvania', 'rhode island', 'south carolina', 'south dakota', 'tennessee',
+    'texas', 'utah', 'vermont', 'virginia', 'west virginia', 'wisconsin', 'wyoming',
+];
+const usStateNameRegex = new RegExp(`\\b(${US_STATE_NAMES.join('|')})\\b`, 'i');
+const usStateOverrideRegex = { test: (s) => usStateCodeOverrideRegex.test(s) || usStateNameRegex.test(s) };
+
+// ISO 3166 alpha-3 codes some ATSs append ("BELGRADE, SRB", "Rehovot,ISR"). Upper case only.
+const NON_US_COUNTRY_CODES_3 = [
+    'GBR', 'IRL', 'FRA', 'DEU', 'ESP', 'PRT', 'ITA', 'NLD', 'BEL', 'LUX', 'CHE', 'AUT', 'SWE', 'NOR',
+    'DNK', 'FIN', 'POL', 'CZE', 'SVK', 'SVN', 'HRV', 'SRB', 'BGR', 'ROU', 'HUN', 'GRC', 'UKR', 'LTU',
+    'LVA', 'EST', 'TUR', 'ISR', 'JOR', 'LBN', 'ARE', 'SAU', 'QAT', 'EGY', 'MAR', 'ZAF', 'NGA', 'KEN',
+    'IND', 'PAK', 'BGD', 'LKA', 'CHN', 'HKG', 'TWN', 'JPN', 'KOR', 'SGP', 'MYS', 'IDN', 'PHL', 'VNM',
+    'THA', 'AUS', 'NZL', 'CAN', 'MEX', 'BRA', 'ARG', 'CHL', 'COL', 'PER', 'URY', 'CRI', 'KAZ', 'ARM',
+];
+const nonUsCountryCode3Regex = new RegExp(`\\b(${NON_US_COUNTRY_CODES_3.join('|')})\\b`);
 
 let _usTermsRegex = null;
 function usTermsRegex() {
@@ -321,7 +361,12 @@ export function isUSCompatible(location = '') {
 
     // A non-US place name wins unless an unambiguous US state code also appears
     // (mirrors the feed's SQL filter in roleFilters.js).
-    if (nonUsLocationRegex().test(loc)) return usStateOverrideRegex.test(location);
+    if (nonUsLocationRegex().test(loc) || nonUsCountryCode3Regex.test(location)) {
+        // "Madrid, MD, es": a trailing country code after a region code wins over the region.
+        const country = location.match(/,[^,]+,\s*([A-Za-z]{2})\s*$/);
+        if (country && country[1].toLowerCase() !== 'us') return false;
+        return usStateOverrideRegex.test(location);
+    }
     if (hasUsStateSignal(location)) return true;
 
     // Legacy substring patterns (multi-word phrases with punctuation)

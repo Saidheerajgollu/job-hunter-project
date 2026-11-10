@@ -284,6 +284,15 @@ export async function initDb() {
         await backfillVisaWording();
         await pool.query(`INSERT INTO settings (key, value) VALUES ('migration_visa_wording_2026_10', 'done') ON CONFLICT (key) DO NOTHING`);
     }
+    // Re-run the US check on every stored job after the location rules got
+    // stricter (more non-US cities, "City, Region, cc" codes). Bump the key
+    // when those rules change again.
+    const usDone = await pool.query(`SELECT 1 FROM settings WHERE key = 'migration_us_recheck_2026_11'`);
+    if (!usDone.rows.length) {
+        const changed = await recheckUsEligibility();
+        console.log(`[db] US location re-check: ${changed} jobs changed`);
+        await pool.query(`INSERT INTO settings (key, value) VALUES ('migration_us_recheck_2026_11', 'done') ON CONFLICT (key) DO NOTHING`);
+    }
     for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
         await pool.query(
             'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO NOTHING',
@@ -343,6 +352,31 @@ export async function expireUnseenJobs(days = 7) {
 }
 
 /** Compute visa_wording for every stored job with a description, 1,000 at a time. */
+/** Recompute us_ineligible for every job; writes only rows whose value changes. */
+export async function recheckUsEligibility() {
+    let lastId = '', changed = 0;
+    for (;;) {
+        const { rows } = await pool.query(
+            `SELECT id, title, location, description, us_ineligible FROM jobs WHERE id > $1 ORDER BY id LIMIT 1000`,
+            [lastId]
+        );
+        if (!rows.length) return changed;
+        const ids = [], values = [];
+        for (const r of rows) {
+            const inel = !isUsEligible(r);
+            if (r.us_ineligible !== inel) { ids.push(r.id); values.push(inel); }
+        }
+        if (ids.length) {
+            await pool.query(
+                `UPDATE jobs SET us_ineligible = v.f FROM unnest($1::text[], $2::boolean[]) AS v(id, f) WHERE jobs.id = v.id`,
+                [ids, values]
+            );
+            changed += ids.length;
+        }
+        lastId = rows[rows.length - 1].id;
+    }
+}
+
 async function backfillVisaWording() {
     let lastId = '';
     for (;;) {
