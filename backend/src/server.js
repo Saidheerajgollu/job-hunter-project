@@ -61,7 +61,7 @@ const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
 // ── Jobs ──────────────────────────────────────────────────────────────────────
 
 app.get('/api/jobs', wrap(async (req, res) => {
-    const { category, role, source, search, page = 1, limit = 50, fresh_only, has_salary, max_age_days, experience, us_only, hide_no_sponsorship, h1b_only } = req.query;
+    const { category, role, source, search, page = 1, limit = 50, fresh_only, has_salary, max_age_days, experience, us_only, hide_no_sponsorship, h1b_only, work_model, e_verify } = req.query;
     const pageNum = Math.max(1, parseInt(page) || 1);
     const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 50));
     const offset = (pageNum - 1) * pageSize;
@@ -75,6 +75,8 @@ app.get('/api/jobs', wrap(async (req, res) => {
         hide_no_sponsorship: hide_no_sponsorship === '1',
         max_age_days: max_age_days ? parseInt(max_age_days) : 0,
         experience: experience || null,
+        work_model: work_model || null,
+        e_verify: e_verify === '1',
         us_only: us_only !== '0',
         limit: pageSize,
         offset,

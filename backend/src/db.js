@@ -13,6 +13,7 @@ import 'dotenv/config';
 import pg from 'pg';
 import { buildJobQueryFilters, usEligibilityCondition, PORTAL_DATE_SQL } from './utils/roleFilters.js';
 import { isUsEligible } from './utils/helpers.js';
+import { extractJobSignals } from './utils/jobSignals.js';
 import { detectVisaWording } from './utils/visaWording.js';
 import { computeStaleUpdates, isRelistRepost, isPortalDateRepost } from './utils/staleness.js';
 
@@ -284,6 +285,17 @@ export async function initDb() {
         await backfillVisaWording();
         await pool.query(`INSERT INTO settings (key, value) VALUES ('migration_visa_wording_2026_10', 'done') ON CONFLICT (key) DO NOTHING`);
     }
+    // Signals read from each posting's text (jobSignals.js). New rows get
+    // them in insertJob; this fills rows saved before the columns existed.
+    await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS min_yoe SMALLINT`);
+    await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS work_model TEXT`);
+    await pool.query(`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS e_verify BOOLEAN`);
+    const signalsDone = await pool.query(`SELECT 1 FROM settings WHERE key = 'migration_job_signals_2026_11'`);
+    if (!signalsDone.rows.length) {
+        const changed = await backfillJobSignals();
+        console.log(`[db] Job signals backfill: ${changed} jobs updated`);
+        await pool.query(`INSERT INTO settings (key, value) VALUES ('migration_job_signals_2026_11', 'done') ON CONFLICT (key) DO NOTHING`);
+    }
     // Re-run the US check on every stored job after the location rules got
     // stricter (more non-US cities, "City, Region, cc" codes). Bump the key
     // when those rules change again.
@@ -351,7 +363,34 @@ export async function expireUnseenJobs(days = 7) {
     return res.rowCount;
 }
 
-/** Compute visa_wording for every stored job with a description, 1,000 at a time. */
+/** Fill min_yoe / work_model / e_verify, and salary where the source gave none. */
+export async function backfillJobSignals() {
+    let lastId = '', changed = 0;
+    for (;;) {
+        const { rows } = await pool.query(
+            `SELECT id, title, location, description, salary FROM jobs WHERE id > $1 ORDER BY id LIMIT 1000`,
+            [lastId]
+        );
+        if (!rows.length) return changed;
+        const ids = [], yoe = [], model = [], everify = [], salary = [];
+        for (const r of rows) {
+            const s = extractJobSignals({ ...r, salary: r.salary || null });
+            if (s.min_yoe === null && !s.work_model && !s.e_verify && !s.salary) continue;
+            ids.push(r.id); yoe.push(s.min_yoe); model.push(s.work_model); everify.push(s.e_verify); salary.push(s.salary);
+        }
+        if (ids.length) {
+            await pool.query(
+                `UPDATE jobs SET min_yoe = v.yoe, work_model = v.model, e_verify = v.everify, salary = v.salary
+                 FROM unnest($1::text[], $2::smallint[], $3::text[], $4::boolean[], $5::text[]) AS v(id, yoe, model, everify, salary)
+                 WHERE jobs.id = v.id`,
+                [ids, yoe, model, everify, salary]
+            );
+            changed += ids.length;
+        }
+        lastId = rows[rows.length - 1].id;
+    }
+}
+
 /** Recompute us_ineligible for every job; writes only rows whose value changes. */
 export async function recheckUsEligibility() {
     let lastId = '', changed = 0;
@@ -377,6 +416,7 @@ export async function recheckUsEligibility() {
     }
 }
 
+/** Compute visa_wording for every stored job with a description, 1,000 at a time. */
 async function backfillVisaWording() {
     let lastId = '';
     for (;;) {
@@ -405,6 +445,7 @@ async function backfillVisaWording() {
  * Returns true when a new row is created OR a repost is detected (resurfaced to user).
  */
 export async function insertJob(job) {
+    const signals = extractJobSignals(job);
     const existingRes = await pool.query(
         `SELECT posted_at, previous_posted_at, scraped_at, closed_at FROM jobs WHERE url = $1 LIMIT 1`,
         [job.url]
@@ -419,12 +460,13 @@ export async function insertJob(job) {
         if (dup.rows.length) return false;
 
         const res = await pool.query(
-            `INSERT INTO jobs (id, title, company, location, url, source, category, salary, description, posted_at, status, is_new, last_seen_at, missed_count, closed_at, us_ineligible, visa_wording)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',true, now(), 0, NULL, $11, $12)`,
+            `INSERT INTO jobs (id, title, company, location, url, source, category, salary, description, posted_at, status, is_new, last_seen_at, missed_count, closed_at, us_ineligible, visa_wording, min_yoe, work_model, e_verify)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'new',true, now(), 0, NULL, $11, $12, $13, $14, $15)`,
             [
                 job.id, job.title, job.company, job.location ?? null, job.url, job.source,
-                job.category, job.salary ?? null, job.description ?? null, job.posted_at ?? null,
+                job.category, signals.salary ?? null, job.description ?? null, job.posted_at ?? null,
                 !isUsEligible(job), detectVisaWording(job.title, job.description),
+                signals.min_yoe, signals.work_model, signals.e_verify,
             ]
         );
         return res.rowCount > 0;
@@ -450,8 +492,13 @@ export async function insertJob(job) {
                company = $2,
                location = $3,
                category = $4,
-               salary = $5,
+               salary = COALESCE($5, salary),
                description = $6,
+               -- Signals are kept when a refresh arrives without them (many sources
+               -- send no description on later polls).
+               min_yoe = COALESCE($13, min_yoe),
+               work_model = COALESCE($14, work_model),
+               e_verify = (COALESCE(e_verify, false) OR $15),
                posted_at = COALESCE($7, posted_at),
                previous_posted_at = COALESCE($8, previous_posted_at),
                is_reposted = true,
@@ -473,7 +520,7 @@ export async function insertJob(job) {
                 job.company,
                 job.location ?? null,
                 job.category,
-                job.salary ?? null,
+                signals.salary ?? null,
                 job.description ?? null,
                 job.posted_at_estimated ? null : (job.posted_at ?? null),
                 previousPosted,
@@ -481,6 +528,7 @@ export async function insertJob(job) {
                 job.source,
                 !isUsEligible(job),
                 detectVisaWording(job.title, job.description),
+                signals.min_yoe, signals.work_model, signals.e_verify,
             ]
         );
         return true;
@@ -492,8 +540,11 @@ export async function insertJob(job) {
            company = $2,
            location = $3,
            category = $4,
-           salary = $5,
+           salary = COALESCE($5, salary),
            description = COALESCE($6, description),
+           min_yoe = COALESCE($12, min_yoe),
+           work_model = COALESCE($13, work_model),
+           e_verify = (COALESCE(e_verify, false) OR $14),
            posted_at = COALESCE($7, posted_at),
            scraped_at = now(),
            us_ineligible = $10,
@@ -511,13 +562,14 @@ export async function insertJob(job) {
             job.company,
             job.location ?? null,
             job.category,
-            job.salary ?? null,
+            signals.salary ?? null,
             job.description ?? null,
             job.posted_at_estimated ? null : (job.posted_at ?? null),
             job.url,
             job.source,
             !isUsEligible(job),
             detectVisaWording(job.title, job.description),
+            signals.min_yoe, signals.work_model, signals.e_verify,
         ]
     );
     return false;
@@ -565,7 +617,7 @@ export async function closeStaleJobs(source, polledCompanies, freshUrls, missThr
 const JOB_COLUMNS = `
   id, title, company, location, url, source, category, salary, description,
   posted_at, previous_posted_at, reposted_at, scraped_at, closed_at,
-  visa_wording,
+  visa_wording, min_yoe, work_model, e_verify,
   is_reposted::int AS is_reposted,
   (CASE WHEN ${PORTAL_DATE_SQL} >= now() - interval '24 hours' THEN 1 ELSE 0 END) AS is_fresh
 `;

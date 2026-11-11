@@ -7,6 +7,7 @@
  */
 
 import { scrapeSimplifyJobs } from './scrapers/simplifyjobs.js';
+import { scrapeJobright } from './scrapers/jobright.js';
 import { scrapeAdzuna } from './scrapers/adzuna.js';
 import { scrapeRemoteOK } from './scrapers/remoteok.js';
 import { scrapeRemotive } from './scrapers/remotive.js';
@@ -55,6 +56,7 @@ export async function runScraper() {
         { name: 'Oracle Cloud',     fn: () => scrapeOracleCloud(filterSenior, discovered.oraclecloud) },
         // ── Community-curated new-grad list (always runs) ───────────────────────
         { name: 'SimplifyJobs',     fn: () => scrapeSimplifyJobs(filterSenior) },
+        { name: 'Jobright lists',   fn: () => scrapeJobright(filterSenior) },
         // ── Free job board APIs (always run) ────────────────────────────────────
         { name: 'Adzuna',           fn: () => scrapeAdzuna(filterSenior) },
         { name: 'RemoteOK',         fn: () => scrapeRemoteOK(filterSenior) },

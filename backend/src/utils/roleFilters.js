@@ -146,27 +146,8 @@ export const ROLE_TITLE_KEYWORDS = {
     ],
 };
 
-/** Experience chip → title/description patterns (years of experience). */
-export const EXPERIENCE_KEYWORDS = {
-    '1': [
-        '1 year', '1+ year', '1-2 year', '0-1 year', 'one year',
-        'entry level', 'entry-level', 'junior', 'new grad', 'new graduate',
-        'associate engineer', 'early career', '0-2 year',
-    ],
-    '2': [
-        '2 year', '2+ year', '1-2 year', '2-3 year', 'two year',
-    ],
-    '3': [
-        '3 year', '3+ year', '2-3 year', '3-4 year', 'three year', 'mid level', 'mid-level',
-    ],
-    '4': [
-        '4 year', '4+ year', '3-4 year', '4-5 year', 'four year',
-    ],
-    '5': [
-        '5+ year', '5 year', '6+ year', '7+ year', '8+ year', '10+ year',
-        'five year', 'senior ', ' staff ', 'principal ', 'lead engineer', 'lead developer',
-    ],
-};
+/** Internship / co-op titles (Postgres regex, whole words). */
+export const INTERN_TITLE_PG_REGEX = '\\m(intern|interns|internship|internships|co-?op)\\M';
 
 /** Hide US-citizenship-only jobs (F-1 can still see roles that don't sponsor). */
 export const CITIZENSHIP_BLOCKED_PATTERNS = [
@@ -252,6 +233,8 @@ export function buildJobQueryFilters({
     h1b_companies = null,
     max_age_days,
     experience,
+    work_model,
+    e_verify,
     us_only = true,
 }) {
     const conditions = [];
@@ -299,8 +282,27 @@ export function buildJobQueryFilters({
         conditions.push(`${PORTAL_DATE_SQL} >= now() - make_interval(days => $${params.length}::int)`);
     }
 
-    if (experience && EXPERIENCE_KEYWORDS[experience]) {
-        appendIlikeOr(conditions, params, EXPERIENCE_KEYWORDS[experience]);
+    // Years of experience come from min_yoe (jobSignals.js). Jobs whose
+    // posting doesn't say are left out when one of these is picked.
+    if (experience === 'intern') {
+        params.push(INTERN_TITLE_PG_REGEX);
+        conditions.push(`title ~* $${params.length}`);
+    } else if (experience === '1') {
+        params.push(INTERN_TITLE_PG_REGEX);
+        conditions.push(`min_yoe <= 1 AND title !~* $${params.length}`);
+    } else if (['2', '3', '4'].includes(experience)) {
+        conditions.push(`min_yoe = ${Number(experience)}`);
+    } else if (experience === '5') {
+        conditions.push('min_yoe >= 5');
+    }
+
+    if (['remote', 'hybrid', 'onsite'].includes(work_model)) {
+        params.push(work_model);
+        conditions.push(`work_model = $${params.length}`);
+    }
+
+    if (e_verify) {
+        conditions.push('e_verify IS TRUE');
     }
 
     if (us_only) {

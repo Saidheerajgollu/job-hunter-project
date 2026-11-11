@@ -10,8 +10,21 @@
 import { makeJobId, isSeniorRole, classifyCategory } from '../utils/helpers.js';
 import { domainFromUrl } from '../utils/companyDomain.js';
 
-const LISTINGS_URL =
-    'https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json';
+const LISTINGS_URLS = [
+    'https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json',
+    'https://raw.githubusercontent.com/SimplifyJobs/Summer2027-Internships/dev/.github/scripts/listings.json',
+];
+
+/**
+ * Simplify's sponsorship flag as a sentence the shared wording checks read:
+ * citizen-only roles are dropped, the other two become the visa badge.
+ */
+export function sponsorshipText(flag) {
+    if (flag === 'U.S. Citizenship is Required') return 'U.S. Citizenship is Required';
+    if (flag === 'Does Not Offer Sponsorship') return 'Does not offer visa sponsorship';
+    if (flag === 'Offers Sponsorship') return 'Visa sponsorship is offered';
+    return null;
+}
 
 // SimplifyJobs category field → hint passed to shared classifyCategory
 const SIMPLIFY_CATEGORY_HINT = {
@@ -37,19 +50,20 @@ export async function scrapeSimplifyJobs(filterSenior = true) {
     console.log('🔍 SimplifyJobs: fetching community new-grad listings...');
 
     const jobs = [];
+    const seenUrls = new Set();
 
-    try {
-        const resp = await fetch(LISTINGS_URL, {
+    for (const listingsUrl of LISTINGS_URLS) try {
+        const resp = await fetch(listingsUrl, {
             headers: {
                 'User-Agent': 'JobHunterPro/1.0 (github.com/Saidheerajgollu/job-hunter-project)',
                 'Accept': 'application/json',
             },
-            signal: AbortSignal.timeout(30000),
+            signal: AbortSignal.timeout(60000),
         });
 
         if (!resp.ok) {
-            console.error(`❌ SimplifyJobs: HTTP ${resp.status}`);
-            return [];
+            console.error(`❌ SimplifyJobs: HTTP ${resp.status} for ${listingsUrl}`);
+            continue;
         }
 
         const listings = await resp.json();
@@ -63,7 +77,7 @@ export async function scrapeSimplifyJobs(filterSenior = true) {
             // Filter seniors if enabled
             if (filterSenior && isSeniorRole(listing.title || '')) continue;
             // Must have a URL
-            if (!listing.url) continue;
+            if (!listing.url || seenUrls.has(listing.url)) continue;
 
             const category = classifyCategory(listing.title || '', SIMPLIFY_CATEGORY_HINT[listing.category] || '');
             if (!category) continue;
@@ -76,6 +90,7 @@ export async function scrapeSimplifyJobs(filterSenior = true) {
                 ? new Date(listing.date_posted * 1000).toISOString()
                 : new Date().toISOString();
 
+            seenUrls.add(listing.url);
             jobs.push({
                 id: makeJobId(`simplify-${listing.id || listing.url}`),
                 title: listing.title || '',
@@ -86,19 +101,15 @@ export async function scrapeSimplifyJobs(filterSenior = true) {
                 company_domain: listing.company_url ? domainFromUrl(listing.company_url) : null,
                 category,
                 salary: null,
-                // Surface Simplify's explicit flag so isEligibleJob's citizenship
-                // check (and the feed's SQL filter) can drop citizen-only roles.
-                description: listing.sponsorship === 'U.S. Citizenship is Required'
-                    ? 'U.S. Citizenship is Required'
-                    : null,
+                description: sponsorshipText(listing.sponsorship),
                 posted_at: postedAt,
             });
         }
 
-        console.log(`✅ SimplifyJobs: ${jobs.length} active tech jobs found`);
     } catch (err) {
         console.error(`❌ SimplifyJobs error: ${err.message}`);
     }
 
+    console.log(`✅ SimplifyJobs: ${jobs.length} active tech jobs found`);
     return jobs;
 }

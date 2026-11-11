@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, Job, Stats, JobFilters, H1bMeta } from '@/lib/api';
+import { DEFAULT_FILTERS, filtersFromQuery, filtersToQuery } from '@/lib/filterUrl';
 import { WatchlistPanel, NotificationBell } from '@/components/WatchlistPanel';
 import { ReachOutFooter } from '@/components/ReachOutFooter';
 
@@ -77,7 +78,7 @@ function formatSource(source: string) {
         'schema-org': 'Schema.org',
         hackernews: 'HN Hiring', themuse: 'The Muse', jobicy: 'Jobicy',
         amazon: 'Amazon', apple: 'Apple', google: 'Google', eightfold: 'Eightfold',
-        bytedance: 'TikTok/ByteDance', oraclecloud: 'Oracle Cloud',
+        bytedance: 'TikTok/ByteDance', oraclecloud: 'Oracle Cloud', jobright: 'Jobright',
     };
     return labels[source] || source;
 }
@@ -165,12 +166,28 @@ const LOCATION_FILTERS = [
 
 const EXPERIENCE_LEVELS = [
     { value: '', label: 'Any exp' },
-    { value: '1', label: '1 yr' },
+    { value: 'intern', label: 'Internship' },
+    { value: '1', label: 'New grad / 0–1 yr' },
     { value: '2', label: '2 yr' },
     { value: '3', label: '3 yr' },
     { value: '4', label: '4 yr' },
     { value: '5', label: '5+ yr' },
 ];
+
+const WORK_MODELS = [
+    { value: 'remote', label: 'Remote' },
+    { value: 'hybrid', label: 'Hybrid' },
+    { value: 'onsite', label: 'On-site' },
+];
+
+function formatYoe(minYoe: number | null): string | null {
+    if (minYoe === null || minYoe === undefined) return null;
+    return minYoe === 0 ? 'Entry level' : `${minYoe}+ yrs exp`;
+}
+
+function formatWorkModel(model: Job['work_model']): string | null {
+    return WORK_MODELS.find(m => m.value === model)?.label ?? null;
+}
 
 const SOURCES = [
     { value: '', label: 'All sources' },
@@ -183,6 +200,7 @@ const SOURCES = [
     { value: 'schema-org', label: 'Schema.org' },
     { value: 'workday', label: 'Workday' },
     { value: 'simplifyjobs', label: 'SimplifyJobs' },
+    { value: 'jobright', label: 'Jobright lists' },
     { value: 'jsearch', label: 'JSearch' },
     { value: 'remoteok', label: 'RemoteOK' },
     { value: 'remotive', label: 'Remotive' },
@@ -203,6 +221,8 @@ const SOURCES = [
 function FilterBar({ filters, onChange, onScrape, scraping, h1bAvailable }: FilterBarProps) {
     const [search, setSearch] = useState(filters.search || '');
     const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+    // Pick up a search term that arrives from the URL after the first render.
+    useEffect(() => { setSearch(filters.search || ''); }, [filters.search]);
 
     function handleSearch(val: string) {
         setSearch(val);
@@ -308,6 +328,28 @@ function FilterBar({ filters, onChange, onScrape, scraping, h1bAvailable }: Filt
                 </div>
             </div>
 
+            {/* Work model row */}
+            <div className="filter-row">
+                <span className="filter-chips-label">Work</span>
+                <div className="filter-chips">
+                    <button
+                        className={`chip ${!filters.work_model ? 'active' : ''}`}
+                        onClick={() => onChange({ work_model: '', page: 1 })}
+                    >
+                        Any
+                    </button>
+                    {WORK_MODELS.map(m => (
+                        <button
+                            key={m.value}
+                            className={`chip ${filters.work_model === m.value ? 'active' : ''}`}
+                            onClick={() => onChange({ work_model: m.value, page: 1 })}
+                        >
+                            {m.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
             {/* Time + extras row */}
             <div className="filter-row">
                 <span className="filter-chips-label">Filter</span>
@@ -346,6 +388,13 @@ function FilterBar({ filters, onChange, onScrape, scraping, h1bAvailable }: Filt
                         title="Hide jobs whose posting says no visa sponsorship"
                     >
                         Hide no-sponsorship
+                    </button>
+                    <button
+                        className={`chip chip-visa ${filters.e_verify === '1' ? 'active' : ''}`}
+                        onClick={() => onChange({ e_verify: filters.e_verify === '1' ? '' : '1', page: 1 })}
+                        title="Only postings that say the employer uses E-Verify (needed for the STEM OPT extension). Many employers use it without saying so."
+                    >
+                        Mentions E-Verify
                     </button>
                     {h1bAvailable && (
                         <button
@@ -417,6 +466,10 @@ function JobCard({ job }: { job: Job }) {
                     <div className="job-company">{job.company}</div>
                     <div className="job-meta">
                         {job.location && <span className="job-meta-item">{job.location}</span>}
+                        {formatWorkModel(job.work_model) && <span className="job-meta-item">{formatWorkModel(job.work_model)}</span>}
+                        {formatYoe(job.min_yoe) && (
+                            <span className="job-meta-item" title="Lowest years of experience the posting asks for">{formatYoe(job.min_yoe)}</span>
+                        )}
                         {job.salary && <span className="job-meta-item">{job.salary}</span>}
                         {job.is_reposted === 1 ? (
                             <>
@@ -445,6 +498,9 @@ function JobCard({ job }: { job: Job }) {
                         )}
                         {job.visa_wording === 'sponsors' && (
                             <span className="badge badge-sponsors" title="The posting says visa sponsorship is available">Sponsors visas</span>
+                        )}
+                        {job.e_verify && (
+                            <span className="badge badge-sponsors" title="The posting says the employer uses E-Verify, which the STEM OPT extension requires">E-Verify</span>
                         )}
                         {formatH1b(job.h1b) && (
                             <span className={`job-meta-item job-h1b${job.h1b === 'none' ? ' job-h1b-none' : ''}`}
@@ -518,7 +574,9 @@ export default function Home() {
     const [h1bMeta, setH1bMeta] = useState<H1bMeta | null>(null);
     const [loading, setLoading] = useState(true);
     const [scraping, setScraping] = useState(false);
-    const [filters, setFilters] = useState<JobFilters>({ page: 1, limit: 30, us_only: '1', max_age_days: '30' });
+    const [filters, setFilters] = useState<JobFilters>(DEFAULT_FILTERS);
+    // Filters live in the URL so a search can be bookmarked or shared.
+    const [urlRead, setUrlRead] = useState(false);
     const { toasts, show: showToast } = useToast();
 
     const fetchJobs = useCallback(async (f: JobFilters, { quiet = false } = {}) => {
@@ -553,12 +611,24 @@ export default function Home() {
     // wide sweep every 6h), so refresh in the background: stats every 30s,
     // the job list every 5 min.
     useEffect(() => {
+        setFilters(prev => ({ ...prev, ...filtersFromQuery(window.location.search) }));
+        setUrlRead(true);
+    }, []);
+
+    useEffect(() => {
+        if (!urlRead) return;
+        const query = filtersToQuery(filters);
+        window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+    }, [filters, urlRead]);
+
+    useEffect(() => {
+        if (!urlRead) return;
         fetchJobs(filters);
         fetchStats();
         const statsTimer = setInterval(fetchStats, 30000);
         const jobsTimer = setInterval(() => fetchJobs(filters, { quiet: true }), 5 * 60 * 1000);
         return () => { clearInterval(statsTimer); clearInterval(jobsTimer); };
-    }, [fetchJobs, fetchStats, filters]);
+    }, [fetchJobs, fetchStats, filters, urlRead]);
 
     function handleFilterChange(partial: Partial<JobFilters>) {
         setFilters(prev => ({ ...prev, ...partial }));

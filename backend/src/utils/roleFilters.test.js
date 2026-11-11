@@ -58,3 +58,27 @@ describe('h1b_companies filter', () => {
         expect(buildJobQueryFilters({ h1b_companies: null }).where).not.toContain('ANY');
     });
 });
+
+describe('signal filters (experience, work model, E-Verify)', () => {
+    it('filters experience on the stored years-of-experience number', () => {
+        expect(buildJobQueryFilters({ experience: '1' }).where).toContain('min_yoe <= 1');
+        expect(buildJobQueryFilters({ experience: '3' }).where).toContain('min_yoe = 3');
+        expect(buildJobQueryFilters({ experience: '5' }).where).toContain('min_yoe >= 5');
+        expect(buildJobQueryFilters({ experience: 'bogus' }).where).not.toContain('min_yoe');
+    });
+
+    it('separates internships from entry-level roles', () => {
+        const intern = buildJobQueryFilters({ experience: 'intern' });
+        expect(intern.where).toMatch(/title ~\* \$\d+/);
+        expect(intern.params.some(p => /intern/.test(String(p)))).toBe(true);
+        expect(buildJobQueryFilters({ experience: '1' }).where).toMatch(/title !~\* \$\d+/);
+    });
+
+    it('filters by work model and E-Verify, ignoring unknown values', () => {
+        const f = buildJobQueryFilters({ work_model: 'remote', e_verify: true });
+        expect(f.where).toMatch(/work_model = \$\d+/);
+        expect(f.params).toContain('remote');
+        expect(f.where).toContain('e_verify IS TRUE');
+        expect(buildJobQueryFilters({ work_model: 'moon' }).where).not.toContain('work_model');
+    });
+});

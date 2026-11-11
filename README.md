@@ -11,12 +11,13 @@ A job aggregator for US tech roles. The backend collects postings from company j
 | Amazon, Apple, Google, TikTok, ByteDance | hourly | Each company's own careers site |
 | Eightfold sites (Netflix, Microsoft, Qualcomm, more) | hourly | Extra tenants found in SimplifyJobs links |
 | Oracle Cloud sites (JPMorgan, Honeywell, more) | hourly | Extra tenants found in SimplifyJobs links |
-| SimplifyJobs, Hacker News "Who is hiring?", Himalayas, RemoteOK, Remotive, We Work Remotely, The Muse, Jobicy | hourly | |
+| SimplifyJobs (new grad and internship lists), Hacker News "Who is hiring?", Himalayas, RemoteOK, Remotive, We Work Remotely, The Muse, Jobicy | hourly | |
+| Jobright's public GitHub lists (new grad and internship, software and data) | hourly | Only the lists on GitHub are read, not jobright.ai. These jobs link to the job's page on Jobright |
 | JSearch, Fantastic.jobs, Adzuna | every 12 h | Optional, only run if you set their API keys |
 
 All sources are public endpoints. There are no logins, no browser automation, and no AI/LLM calls. Scrapers follow each site's robots.txt (for example, only the first page of Google results is read).
 
-Not covered: Meta (its careers site has no public endpoint, so Meta jobs only arrive through SimplifyJobs), and sites like LinkedIn or Jobright that need an account.
+Not covered: Meta (its careers site has no public endpoint, so Meta jobs only arrive through SimplifyJobs), and sites like LinkedIn that need an account.
 
 ## What happens to a job
 
@@ -24,6 +25,17 @@ Not covered: Meta (its careers site has no public endpoint, so Meta jobs only ar
 2. Non-US locations and postings that require US citizenship or a security clearance are dropped.
 3. Jobs are deduplicated by URL, and by company + title + location across sources (the company's own ATS copy is kept over an aggregator's). If a known job comes back with a newer posting date, it is flagged as reposted.
 4. For ATS boards that return their full listing, a job missing from two checks in a row is marked closed and leaves the feed. Any job that no source has reported for 7 days is closed too.
+
+## What is read from each posting
+
+Plain text rules (no AI) pull a few facts out of the title, location and description. Each one is left empty when the posting doesn't clearly say.
+
+- **Experience:** the lowest years of experience asked for, e.g. `2+ yrs exp`. Intern, new grad and entry-level titles count as `Entry level`.
+- **Work model:** Remote, Hybrid or On-site.
+- **Salary:** a pay range written in the description, when the source gave no salary field.
+- **E-Verify:** whether the posting says the employer uses E-Verify. The STEM OPT extension needs an E-Verify employer. Many employers use it without saying so in the posting, so a missing badge means nothing.
+
+About half of all jobs come with a description, so the experience and work-model filters only show jobs where this could be read.
 
 ## Visa signals (for OPT / STEM OPT)
 
@@ -50,7 +62,8 @@ The Labor Department site blocks automated downloads, so this is a manual step.
 
 ## Dashboard features
 
-- Filter by role, source, experience level (from the title), posting age (24h / 7 days / 30 days), salary listed, visa wording, H-1B sponsors, and text search
+- Filter by role, source, experience (internship, new grad, or years asked for), work model, posting age (24h / 7 days / 30 days), salary listed, visa wording, E-Verify, H-1B sponsors, and text search
+- The filters are kept in the page address, so a search can be bookmarked or shared
 - Stats for open jobs, jobs posted in the last 24 hours and 7 days, companies, and the last sync
 - The page refreshes on its own (stats every 30 seconds, the job list every 5 minutes)
 - Company watchlist: add a company and get browser push alerts when it posts a matching role. If its ATS is found, the board is checked directly every 30 minutes; otherwise the company is matched by name against the jobs all the scrapers collect
@@ -109,7 +122,7 @@ The backend serves JSON under `/api`:
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /jobs` | Job feed. Query: `role`, `source`, `search`, `experience`, `max_age_days`, `fresh_only`, `has_salary`, `hide_no_sponsorship`, `h1b_only`, `us_only`, `page`, `limit` (max 100). Each job includes `visa_wording` and `h1b` |
+| `GET /jobs` | Job feed. Query: `role`, `source`, `search`, `experience`, `max_age_days`, `fresh_only`, `has_salary`, `hide_no_sponsorship`, `h1b_only`, `work_model`, `e_verify`, `us_only`, `page`, `limit` (max 100). Each job includes `visa_wording`, `h1b`, `min_yoe`, `work_model` and `e_verify` |
 | `GET /h1b/meta` | When the H-1B data was imported and which fiscal years it covers |
 | `POST /jobs/reclassify` | Re-run role classification on stored jobs |
 | `GET /stats` | Open jobs, last 24h / 7 days, companies, last finished scrape run and whether one is running |

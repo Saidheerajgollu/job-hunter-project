@@ -17,6 +17,11 @@ export interface Job {
     scraped_at: string;
     closed_at: string | null;
     visa_wording: 'no_sponsorship' | 'sponsors' | null;
+    /** Lowest years of experience the posting asks for (0 = intern / new grad), or null when it doesn't say. */
+    min_yoe: number | null;
+    work_model: 'remote' | 'hybrid' | 'onsite' | null;
+    /** The posting says the employer uses E-Verify (needed for the STEM OPT extension). */
+    e_verify: boolean | null;
     /** Company website (e.g. "stripe.com") for its logo, or null when unknown. */
     company_domain: string | null;
     /** Company's FY25–26 H-1B record: summary, 'none' (no usable match), or null (no data imported). */
@@ -72,6 +77,8 @@ export interface JobFilters {
     h1b_only?: string;
     max_age_days?: string;
     experience?: string;
+    work_model?: string;
+    e_verify?: string;
     us_only?: string;
     page?: number;
     limit?: number;
